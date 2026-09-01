@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<title>ISDBM Digital — Argeplano</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;color:#0f172a}
+#root{display:flex;flex-direction:column;min-height:100vh}
+.sidebar{width:220px;background:#fff;border-right:1px solid #e2e8f0;display:flex;flex-direction:column;flex-shrink:0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:14px;color:#475569;transition:background .15s}
+.nav-item.active{background:#eff6ff;color:#2563eb;font-weight:600}
+.nav-item:hover:not(.active){background:#f8fafc}
+.topbar{height:52px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0}
+.card{background:#fff;border-radius:12px;padding:20px}
+.stat-card{background:#f8fafc;border-radius:10px;padding:14px 18px;flex:1;min-width:100px}
+.btn{padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:opacity .15s}
+.btn:hover{opacity:.88}
+.btn-primary{background:#2563eb;color:#fff}
+.btn-secondary{background:#f8fafc;color:#374151;border:1px solid #e2e8f0}
+.btn-success{background:#16a34a;color:#fff}
+.btn-block{width:100%}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group label{font-size:12px;color:#64748b;font-weight:500}
+.form-group input,.form-group select,.form-group textarea{padding:8px 10px;border:1px solid #e2e8f0;border-radius:7px;font-size:13px;color:#0f172a;background:#fff;outline:none;width:100%}
+.form-group input:focus,.form-group select:focus{border-color:#2563eb}
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{text-align:left;padding:8px 12px;color:#94a3b8;font-weight:500;background:#f8fafc;font-size:12px}
+.data-table td{padding:11px 12px;border-top:1px solid #f1f5f9}
+.data-table tr:hover td{background:#fafbfc}
+.badge{border-radius:20px;padding:2px 10px;font-weight:700;font-size:12px;display:inline-block}
+.step-circle{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+.info-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f8fafc;font-size:13px}
+.info-row .k{color:#64748b}.info-row .v{font-weight:600;color:#0f172a;text-align:right;max-width:60%}
+/* Slider */
+.slider-wrap{margin-bottom:18px}
+.slider-wrap .slider-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.slider-wrap .slider-label{font-size:13px;font-weight:500;color:#374151}
+.slider-wrap .slider-score{font-size:15px;font-weight:700}
+.slider-wrap input[type=range]{width:100%;height:6px;-webkit-appearance:none;background:#e2e8f0;border-radius:3px;outline:none;cursor:pointer}
+.slider-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#2563eb;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.slider-wrap .slider-desc{font-size:11px;color:#94a3b8;margin-top:3px}
+/* Score display */
+.score-big{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.score-num{font-size:52px;font-weight:800;line-height:1}
+.score-label{font-size:13px;font-weight:600;margin-top:6px}
+/* Map */
+#leaflet-map{position:absolute;inset:0;z-index:1}
+.map-search-bar{position:absolute;top:10px;left:10px;z-index:999;background:#fff;border-radius:9px;border:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;padding:8px 12px;width:260px}
+.map-search-bar input{border:none;outline:none;font-size:13px;flex:1}
+.nominatim-results{position:absolute;top:54px;left:10px;z-index:1000;background:#fff;border-radius:9px;border:1px solid #e2e8f0;width:260px;max-height:180px;overflow-y:auto}
+.nominatim-item{padding:9px 14px;font-size:12px;cursor:pointer;border-bottom:1px solid #f8fafc}
+.nominatim-item:hover{background:#eff6ff;color:#2563eb}
+.map-layer-btns{position:absolute;top:10px;right:10px;z-index:999;display:flex;flex-direction:column;gap:6px}
+.map-layer-btn{background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.map-layer-btn.active{background:#eff6ff;color:#2563eb;border-color:#bfdbfe}
+.statusbar{height:28px;background:#0f172a;color:#94a3b8;font-size:11px;display:flex;align-items:center;padding:0 14px;gap:20px;flex-shrink:0}
+/* Alt cards */
+.alt-card{border:1.5px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:14px}
+.alt-card:hover{border-color:#bfdbfe;background:#f8faff}
+.alt-card.selected{border-color:#2563eb;background:#eff6ff}
+.alt-rank{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+/* Mobile */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .mobile-nav{display:flex!important;position:fixed;bottom:0;left:0;right:0;z-index:1000}
+  .page-content{padding-bottom:70px!important}
+}
+.mobile-nav{display:none;background:#fff;border-top:1px solid #e2e8f0}
+.mobile-nav-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 4px;font-size:10px;color:#64748b;cursor:pointer;gap:2px}
+.mobile-nav-item.active{color:#2563eb}
+/* PDF modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center}
+.modal{background:#fff;border-radius:14px;padding:28px;width:90%;max-width:480px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback} = React;
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const IL_ILCE = {
+  "İstanbul":["Pendik","Kadıköy","Beşiktaş","Üsküdar","Maltepe","Ataşehir","Kartal","Tuzla","Silivri","Çekmeköy"],
+  "Ankara":["Çankaya","Keçiören","Yenimahalle","Sincan","Mamak","Etimesgut","Pursaklar","Gölbaşı"],
+  "İzmir":["Bornova","Karşıyaka","Konak","Buca","Bayraklı","Gaziemir","Menemen","Torbalı"],
+  "Bursa":["Nilüfer","Osmangazi","Yıldırım","Mudanya","Gemlik","İnegöl","Gürsu"],
+  "Antalya":["Muratpaşa","Konyaaltı","Kepez","Aksu","Döşemealtı","Alanya","Manavgat"],
+  "Kocaeli":["İzmit","Gebze","Darıca","Körfez","Çayırova","Dilovası","Kartepe"],
+  "Gaziantep":["Şahinbey","Şehitkamil","Nizip","İslahiye","Nurdağı"],
+  "Konya":["Selçuklu","Karatay","Meram","Ereğli","Akşehir","Beyşehir"],
+};
+
+const METRICS = [
+  { key:"ulasim",    label:"Ulaşım",              weight:0.20, desc:"Metro, otoyol, liman, havalimanı erişimi", icon:"🚇" },
+  { key:"demografi", label:"Demografi",            weight:0.15, desc:"Nüfus yoğunluğu, büyüme, gelir seviyesi",  icon:"👥" },
+  { key:"ticari",    label:"Ticari Potansiyel",    weight:0.20, desc:"Ticaret hacmi, sektör uyumu, talep",       icon:"📈" },
+  { key:"altyapi",   label:"Altyapı",              weight:0.20, desc:"Elektrik, su, doğalgaz, internet altyapısı",icon:"⚡" },
+  { key:"risk",      label:"Risk",                 weight:0.10, desc:"Deprem riski, hukuki durum, pazar riski",  icon:"🛡️" },
+  { key:"gelisme",   label:"Gelişme Potansiyeli",  weight:0.15, desc:"İmar durumu, bölge gelişim planları",      icon:"🚀" },
+];
+
+const INV_TEMPLATES = [
+  { name:"Data Center Campus",       icon:"🏗️", minScore:85, scoreBonus:{ altyapi:30, ulasim:20 }, capex:"450-600 M$", roi:"12-18%", irr:"14-22%", sure:"24-36 ay", kapasite:"40-60 MW" },
+  { name:"Lojistik Merkezi",         icon:"🚚", minScore:75, scoreBonus:{ ulasim:30, altyapi:20 }, capex:"80-150 M$",  roi:"14-20%", irr:"16-24%", sure:"18-24 ay", kapasite:"50.000 m²" },
+  { name:"Teknoloji Kampüsü",        icon:"💻", minScore:78, scoreBonus:{ demografi:25, ticari:25 },capex:"200-350 M$", roi:"10-15%", irr:"12-18%", sure:"30-42 ay", kapasite:"30.000 m²" },
+  { name:"Karma Kullanım (MixedUse)",icon:"🏢", minScore:65, scoreBonus:{ demografi:20, ticari:20 },capex:"150-280 M$", roi:"8-14%",  irr:"10-16%", sure:"36-48 ay", kapasite:"25.000 m²" },
+  { name:"AVM / Ticaret Merkezi",    icon:"🛒", minScore:70, scoreBonus:{ ticari:30, demografi:20 },capex:"100-200 M$", roi:"9-13%",  irr:"11-15%", sure:"24-36 ay", kapasite:"20.000 m²" },
+  { name:"Otel / Turizm",            icon:"🏨", minScore:60, scoreBonus:{ ulasim:25, demografi:15 },capex:"50-120 M$",  roi:"7-12%",  irr:"9-14%",  sure:"18-30 ay", kapasite:"150-300 oda" },
+  { name:"Konut Projesi",            icon:"🏘️", minScore:55, scoreBonus:{ demografi:30, gelisme:20 },capex:"40-100 M$", roi:"15-25%", irr:"18-28%", sure:"24-36 ay", kapasite:"200-500 konut" },
+  { name:"Endüstriyel Tesis",        icon:"🏭", minScore:60, scoreBonus:{ altyapi:25, ulasim:25 },  capex:"30-80 M$",  roi:"11-17%", irr:"13-19%", sure:"12-18 ay", kapasite:"Özelleştirilmiş" },
+];
+
+// ── Score Calculator ───────────────────────────────────────────────────────
+function calcISDBM(metrics) {
+  return Math.round(METRICS.reduce((sum,m) => sum + (metrics[m.key]||50)*m.weight, 0));
+}
+
+function calcAlternatives(metrics, parcelArea) {
+  const base = calcISDBM(metrics);
+  return INV_TEMPLATES.map(t => {
+    let bonus = 0;
+    Object.entries(t.scoreBonus).forEach(([k,w]) => { bonus += ((metrics[k]||50)-50) * (w/100); });
+    const score = Math.min(100, Math.round(base + bonus));
+    const uyg = score>=85?"Çok Yüksek":score>=75?"Yüksek":score>=60?"Orta":"Düşük";
+    const uygColor = score>=85?"#16a34a":score>=75?"#2563eb":score>=60?"#d97706":"#ef4444";
+    return { ...t, score, uyg, uygColor };
+  }).sort((a,b)=>b.score-a.score);
+}
+
+function scoreLabel(s) { return s>=85?"Mükemmel Fırsat":s>=75?"Güçlü Fırsat":s>=60?"Orta Potansiyel":"Düşük Potansiyel"; }
+function scoreColor(s) { return s>=85?"#16a34a":s>=75?"#2563eb":s>=60?"#d97706":"#ef4444"; }
+
+// ── Components ─────────────────────────────────────────────────────────────
+const ScoreRing = ({score,size=72,color="#2563eb"}) => {
+  const r=size/2-7, circ=2*Math.PI*r, offset=circ-(score/100)*circ;
+  return <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e5e7eb" strokeWidth="5"/>
+    <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth="5"
+      strokeDasharray={circ.toFixed(1)} strokeDashoffset={offset.toFixed(1)}
+      strokeLinecap="round" transform={`rotate(-90 ${size/2} ${size/2})`}/>
+    <text x={size/2} y={size/2+5} textAnchor="middle" fill={color} fontSize={size>80?"18":"13"} fontWeight="700">{score}</text>
+  </svg>;
+};
+
+const Badge = ({score}) => {
+  const c=scoreColor(score), bg=score>=85?"#dcfce7":score>=75?"#dbeafe":score>=60?"#fef3c7":"#fee2e2";
+  return <span className="badge" style={{background:bg,color:c}}>{score}</span>;
+};
+
+const InfoRow = ({k,v}) => <div className="info-row"><span className="k">{k}</span><span className="v">{v}</span></div>;
+
+const MetricSlider = ({metric,value,onChange}) => {
+  const c = value>=80?"#16a34a":value>=60?"#2563eb":"#d97706";
+  const lbl = value>=80?"Çok İyi":value>=60?"İyi":value>=40?"Orta":"Zayıf";
+  return <div className="slider-wrap">
+    <div className="slider-header">
+      <span className="slider-label">{metric.icon} {metric.label} <span style={{fontSize:11,color:"#94a3b8",fontWeight:400}}>(%{Math.round(metric.weight*100)} ağırlık)</span></span>
+      <span className="slider-score" style={{color:c}}>{value} <span style={{fontSize:11,fontWeight:500}}>{lbl}</span></span>
+    </div>
+    <input type="range" min="0" max="100" value={value} onChange={e=>onChange(metric.key,+e.target.value)}
+      style={{"--c":c}} />
+    <div className="slider-desc">{metric.desc}</div>
+  </div>;
+};
+
+// ── Leaflet Map ────────────────────────────────────────────────────────────
+const LeafletMap = ({activeParcel}) => {
+  const mapRef=useRef(null), leafletRef=useRef(null), layersRef=useRef({});
+  const parcelRef=useRef(null), circleRef=useRef(null);
+  const [searchQ,setSearchQ]=useState(''), [results,setResults]=useState([]);
+  const [activeLayer,setActiveLayer]=useState('osm');
+  const [coords,setCoords]=useState('—'), [zoom,setZoom]=useState(6);
+
+  useEffect(()=>{
+    if(leafletRef.current) return;
+    const map=L.map(mapRef.current,{zoomControl:true}).setView([39.0,35.0],6);
+    leafletRef.current=map;
+    const layers={
+      osm:L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}),
+      satellite:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri',maxZoom:19}),
+      topo:L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{attribution:'© OpenTopoMap',maxZoom:17}),
+    };
+    layersRef.current=layers; layers.osm.addTo(map);
+    map.on('mousemove',e=>setCoords(`${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`));
+    map.on('zoom',()=>setZoom(map.getZoom()));
+    return ()=>{map.remove();leafletRef.current=null;};
+  },[]);
+
+  useEffect(()=>{
+    if(!activeParcel||!leafletRef.current) return;
+    const map=leafletRef.current;
+    if(parcelRef.current) map.removeLayer(parcelRef.current);
+    if(circleRef.current) map.removeLayer(circleRef.current);
+    const poly=L.polygon(activeParcel.coords,{color:'#ef4444',fillColor:'#ef4444',fillOpacity:.2,weight:2.5}).addTo(map);
+    parcelRef.current=poly;
+    const icon=L.divIcon({className:'',html:`<div style="background:#ef4444;color:#fff;padding:3px 9px;border-radius:5px;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.2)">${activeParcel.label}</div>`,iconAnchor:[30,10]});
+    L.marker([activeParcel.lat,activeParcel.lng],{icon}).addTo(map);
+    map.fitBounds(poly.getBounds(),{padding:[60,60]});
+    circleRef.current=L.circle([activeParcel.lat,activeParcel.lng],{radius:1000,color:'#2563eb',fillColor:'#2563eb',fillOpacity:.05,weight:1.5,dashArray:'6,4'}).addTo(map);
+  },[activeParcel]);
+
+  const switchLayer=name=>{
+    const map=leafletRef.current; if(!map) return;
+    Object.values(layersRef.current).forEach(l=>{try{map.removeLayer(l);}catch(e){}});
+    layersRef.current[name].addTo(map); setActiveLayer(name);
+  };
+
+  const doSearch=q=>{
+    if(q.length<3){setResults([]);return;}
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q+', Türkiye')}&limit=5&countrycodes=tr&accept-language=tr`)
+      .then(r=>r.json()).then(setResults).catch(()=>{});
+  };
+
+  const gotoResult=item=>{
+    const map=leafletRef.current; if(!map) return;
+    map.setView([+item.lat,+item.lon],16);
+    L.marker([+item.lat,+item.lon]).addTo(map).bindPopup(item.display_name.split(',')[0]).openPopup();
+    setResults([]); setSearchQ(item.display_name.split(',')[0]);
+  };
+
+  return <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+    <div style={{flex:1,position:'relative',minHeight:360}}>
+      <div className="map-search-bar">
+        <span style={{color:'#94a3b8'}}>🔍</span>
+        <input value={searchQ} onChange={e=>{setSearchQ(e.target.value);doSearch(e.target.value);}} placeholder="Adres veya mahalle ara..."/>
+      </div>
+      {results.length>0&&<div className="nominatim-results">
+        {results.map((r,i)=><div key={i} className="nominatim-item" onClick={()=>gotoResult(r)}>📍 {r.display_name.slice(0,55)}…</div>)}
+      </div>}
+      <div className="map-layer-btns">
+        {[['osm','OSM'],['satellite','Uydu'],['topo','Topo']].map(([k,l])=>(
+          <button key={k} className={`map-layer-btn${activeLayer===k?' active':''}`} onClick={()=>switchLayer(k)}>{l}</button>
+        ))}
+      </div>
+      <div ref={mapRef} id="leaflet-map"/>
+    </div>
+    <div className="statusbar">
+      <span>Koordinat: <span style={{color:'#60a5fa'}}>{coords}</span></span>
+      <span>Zoom: <span style={{color:'#60a5fa'}}>{zoom}</span></span>
+      <span style={{marginLeft:'auto'}}>© OpenStreetMap | ISDBM Digital</span>
+    </div>
+  </div>;
+};
+
+// ── PDF Generator ──────────────────────────────────────────────────────────
+function generatePDF(parcel, metrics, alts, isdbmScore) {
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const W=210, margin=18, lineH=7;
+  let y=margin;
+
+  const line=(text,x,fontSize=10,bold=false,color=[30,30,30])=>{
+    doc.setFontSize(fontSize); doc.setFont('helvetica',bold?'bold':'normal');
+    doc.setTextColor(...color); doc.text(text,x,y); y+=lineH;
+  };
+  const hline=(color=[226,232,240])=>{
+    doc.setDrawColor(...color); doc.line(margin,y,W-margin,y); y+=4;
+  };
+  const rect=(x,yw,h,r,g,b)=>{
+    doc.setFillColor(r,g,b); doc.rect(x,yw,W-2*margin,h,'F');
+  };
+
+  // Header band
+  doc.setFillColor(15,23,42); doc.rect(0,0,W,28,'F');
+  doc.setFontSize(18); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text('ISDBM Digital',margin,12);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(148,163,184);
+  doc.text('ARGEPLANO | Investment Intelligence Platform',margin,19);
+  doc.setFontSize(10); doc.setTextColor(96,165,250);
+  doc.text('YATIRIM ANALİZ RAPORU',W-margin,12,{align:'right'});
+  doc.setFontSize(8); doc.setTextColor(148,163,184);
+  doc.text(new Date().toLocaleDateString('tr-TR'),W-margin,19,{align:'right'});
+  y=36;
+
+  // Title
+  doc.setFontSize(14); doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42);
+  doc.text(`${parcel.ada}/${parcel.parsel} Parsel — ${parcel.il} / ${parcel.ilce}`,margin,y); y+=9;
+
+  // ISDBM Score box
+  const scoreColor2 = isdbmScore>=85?[22,163,74]:isdbmScore>=75?[37,99,235]:isdbmScore>=60?[217,119,6]:[239,68,68];
+  doc.setFillColor(...scoreColor2); doc.roundedRect(margin,y,50,22,3,3,'F');
+  doc.setFontSize(22); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+  doc.text(String(isdbmScore),margin+25,y+12,{align:'center'});
+  doc.setFontSize(7); doc.setFont('helvetica','normal');
+  doc.text('ISDBM SKORU',margin+25,y+18,{align:'center'});
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...scoreColor2);
+  doc.text(scoreLabel(isdbmScore),margin+56,y+8);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
+  doc.text('100 üzerinden hesaplanan bütünleşik yatırım potansiyel skoru',margin+56,y+15);
+  y+=30;
+
+  hline();
+
+  // Parcel info table
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42);
+  doc.text('PARSEL BİLGİLERİ',margin,y); y+=8;
+  const pInfo = [
+    ['İl / İlçe',`${parcel.il} / ${parcel.ilce}`],
+    ['Mahalle',parcel.mahalle||'—'],
+    ['Ada / Parsel',`${parcel.ada} / ${parcel.parsel}`],
+    ['Tapu Alanı',parcel.alan?`${Number(parcel.alan).toLocaleString('tr-TR')} m²`:'—'],
+    ['Plan Durumu',parcel.planDurumu||'—'],
+    ['Mevcut Kullanım',parcel.mevcutKullanim||'—'],
+    ['Proje Adı',parcel.projeAdi||'—'],
+  ];
+  pInfo.forEach(([k,v],i)=>{
+    if(i%2===0) doc.setFillColor(248,250,252); else doc.setFillColor(255,255,255);
+    doc.rect(margin,y-4,W-2*margin,7,'F');
+    doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
+    doc.text(k,margin+2,y);
+    doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42);
+    doc.text(v,W-margin-2,y,{align:'right'});
+    y+=7;
+  });
+  y+=4; hline();
+
+  // Metric scores
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42);
+  doc.text('ANALİZ METRİKLERİ',margin,y); y+=8;
+  METRICS.forEach((m,i)=>{
+    const sc=metrics[m.key]||50;
+    const sc2=scoreColor(sc); 
+    const [r,g,b]=sc>=85?[22,163,74]:sc>=75?[37,99,235]:sc>=60?[217,119,6]:[239,68,68];
+    doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(15,23,42);
+    doc.text(`${m.label}`,margin,y);
+    // Progress bar bg
+    doc.setFillColor(226,232,240); doc.rect(margin+52,y-4,80,5,'F');
+    // Progress bar fill
+    doc.setFillColor(r,g,b); doc.rect(margin+52,y-4,80*(sc/100),5,'F');
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(r,g,b);
+    doc.text(`${sc}`,margin+136,y,{align:'right'});
+    y+=8;
+  });
+  y+=2; hline();
+
+  // Top 3 alternatives
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42);
+  doc.text('YATIRIM ALTERNATİFLERİ (İlk 3)',margin,y); y+=8;
+  alts.slice(0,3).forEach((alt,i)=>{
+    const [r,g,b]=alt.score>=85?[22,163,74]:alt.score>=75?[37,99,235]:alt.score>=60?[217,119,6]:[239,68,68];
+    doc.setFillColor(i===0?[239,246,255]:[248,250,252]); 
+    if(i===0) doc.setFillColor(239,246,255); else doc.setFillColor(248,250,252);
+    doc.rect(margin,y-5,W-2*margin,20,'F');
+    doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42);
+    doc.text(`${i+1}. ${alt.name}`,margin+3,y+2);
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
+    doc.text(`CAPEX: ${alt.capex}  |  ROI: ${alt.roi}  |  IRR: ${alt.irr}  |  Süre: ${alt.sure}`,margin+3,y+8);
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(r,g,b);
+    doc.text(`${alt.score}`,W-margin-3,y+2,{align:'right'});
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(r,g,b);
+    doc.text(alt.uyg,W-margin-3,y+8,{align:'right'});
+    y+=22;
+  });
+
+  hline();
+
+  // Footer
+  doc.setFontSize(8); doc.setTextColor(148,163,184);
+  doc.text('Bu rapor ISDBM Digital metodolojisi kullanılarak hazırlanmıştır. Nihai yatırım kararları için uzman görüşü alınız.',margin,y);
+  y+=5;
+  doc.text(`ARGEPLANO | ISDBM Digital | ${new Date().toLocaleString('tr-TR')}`,margin,y);
+  doc.text(`Sayfa 1/1`,W-margin,y,{align:'right'});
+
+  doc.save(`ISDBM_Rapor_${parcel.ada}_${parcel.parsel}_${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────
+const NAV = [
+  {key:'dashboard',label:'Dashboard',icon:'🏠'},
+  {key:'newproject',label:'Yeni Proje',icon:'➕'},
+  {key:'map',label:'Harita',icon:'🗺️'},
+  {key:'projects',label:'Projeler',icon:'📁'},
+  {key:'reports',label:'Raporlar',icon:'📄'},
+];
+
+const defaultMetrics = {ulasim:60,demografi:60,ticari:60,altyapi:60,risk:60,gelisme:60};
+const defaultParcel = {projeAdi:'',il:'İstanbul',ilce:'Pendik',mahalle:'Velibaba',ada:'1254',parsel:'7',alan:'24850',planDurumu:'Sanayi Bölgesi',mevcutKullanim:'Boş Arsa'};
+
+const App = () => {
+  const [screen,setScreen]=useState('dashboard');
+  const [activeNav,setActiveNav]=useState('dashboard');
+  const [step,setStep]=useState(1);
+  const [parcel,setParcel]=useState({...defaultParcel});
+  const [metrics,setMetrics]=useState({...defaultMetrics});
+  const [selectedAlt,setSelectedAlt]=useState(null);
+  const [activeParcel,setActiveParcel]=useState(null);
+  const [projects,setProjects]=useState([
+    {id:1,name:"Pendik Lojistik & DC",location:"Pendik / İstanbul",parcel:"1254 / 7",score:89,status:"Tamamlandı",date:"20.05.2024",
+     metrics:{ulasim:86,demografi:72,ticari:81,altyapi:89,risk:74,gelisme:91},
+     parcelData:{projeAdi:'Pendik Lojistik & DC',il:'İstanbul',ilce:'Pendik',mahalle:'Velibaba',ada:'1254',parsel:'7',alan:'24850',planDurumu:'Sanayi Bölgesi',mevcutKullanim:'Boş Arsa'},
+     lat:40.9267,lng:29.1200},
+    {id:2,name:"Ankara Teknoloji Kampüsü",location:"Sincan / Ankara",parcel:"8901 / 3",score:82,status:"Tamamlandı",date:"18.05.2024",
+     metrics:{ulasim:78,demografi:82,ticari:85,altyapi:80,risk:70,gelisme:88},
+     parcelData:{projeAdi:'Ankara Teknoloji Kampüsü',il:'Ankara',ilce:'Sincan',mahalle:'Fatih',ada:'8901',parsel:'3',alan:'15000',planDurumu:'Karma',mevcutKullanim:'Boş Arsa'},
+     lat:39.9334,lng:32.8597},
+  ]);
+  const [showPdfModal,setShowPdfModal]=useState(false);
+
+  const ilceler = IL_ILCE[parcel.il]||[];
+  const isdbmScore = calcISDBM(metrics);
+  const alternatives = calcAlternatives(metrics, parcel.alan);
+
+  const setMetric=(key,val)=>setMetrics(m=>({...m,[key]:val}));
+  const setP=(key,val)=>setParcel(p=>({...p,[key]:val}));
+
+  const goNav=(key)=>{
+    setActiveNav(key);
+    if(key==='dashboard') setScreen('dashboard');
+    else if(key==='newproject'){setScreen('newproject');setStep(1);setMetrics({...defaultMetrics});setParcel({...defaultParcel});setSelectedAlt(null);}
+    else if(key==='map') setScreen('mapscreen');
+    else if(key==='projects') setScreen('projects');
+    else if(key==='reports') setScreen('reports');
+  };
+
+  const saveProject=()=>{
+    const newP={
+      id:projects.length+1,
+      name:parcel.projeAdi||`${parcel.il}/${parcel.ada}-${parcel.parsel}`,
+      location:`${parcel.ilce} / ${parcel.il}`,
+      parcel:`${parcel.ada} / ${parcel.parsel}`,
+      score:isdbmScore,
+      status:"Tamamlandı",
+      date:new Date().toLocaleDateString('tr-TR'),
+      metrics:{...metrics},
+      parcelData:{...parcel},
+      lat:40.9267, lng:29.1200,
+    };
+    setProjects(prev=>[newP,...prev]);
+  };
+
+  const parcelCoords=(lat,lng)=>[[lat+.001,lng-.0015],[lat+.001,lng+.0015],[lat-.001,lng+.0015],[lat-.001,lng-.0015]];
+
+  // ── Shell ────────────────────────────────────────────────────────────────
+  const Shell=({children,nav,noPad})=>(
+    <div style={{display:'flex',flex:1,overflow:'hidden'}}>
+      <div className="sidebar">
+        <div style={{padding:'18px 20px 12px',borderBottom:'1px solid #f1f5f9'}}>
+          <div style={{fontSize:11,color:'#94a3b8',letterSpacing:2}}>ARGEPLANO</div>
+          <div style={{fontSize:17,fontWeight:800}}>ISDBM <span style={{color:'#2563eb'}}>Digital</span></div>
+        </div>
+        <nav style={{flex:1,padding:'10px 0'}}>
+          {NAV.map(n=>(
+            <div key={n.key} className={`nav-item${nav===n.key?' active':''}`} onClick={()=>goNav(n.key)}>
+              <span style={{fontSize:16}}>{n.icon}</span>{n.label}
+            </div>
+          ))}
+        </nav>
+        <div style={{padding:'12px 20px',borderTop:'1px solid #f1f5f9',fontSize:13,color:'#64748b'}}>
+          <div style={{fontSize:11,color:'#94a3b8'}}>ISDBM v1.0</div>
+        </div>
+      </div>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div className="topbar">
+          <div style={{fontSize:13,color:'#64748b',fontWeight:500}}>
+            {nav==='dashboard'&&'Dashboard'}{nav==='newproject'&&'Yeni Proje Analizi'}{nav==='map'&&'Harita Analizi'}{nav==='projects'&&'Projeler'}{nav==='reports'&&'Raporlar'}
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <span style={{fontSize:18,cursor:'pointer'}}>🔔</span>
+            <div style={{width:30,height:30,borderRadius:'50%',background:'#2563eb',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>HK</div>
+            <div style={{fontSize:12}}><div style={{fontWeight:600}}>Hayati Küçük</div><div style={{color:'#94a3b8',fontSize:10}}>ARGEPLANO</div></div>
+          </div>
+        </div>
+        <div className="page-content" style={{flex:1,overflow:'auto',padding:noPad?0:20,display:'flex',flexDirection:'column'}}>
+          {children}
+        </div>
+      </div>
+      <div className="mobile-nav">
+        {NAV.map(n=>(
+          <div key={n.key} className={`mobile-nav-item${nav===n.key?' active':''}`} onClick={()=>goNav(n.key)}>
+            <span style={{fontSize:20}}>{n.icon}</span>{n.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── Dashboard ────────────────────────────────────────────────────────────
+  if(screen==='dashboard') return <Shell nav="dashboard">
+    <div style={{marginBottom:18}}>
+      <div style={{fontSize:20,fontWeight:700}}>Hoş Geldiniz, Hayati Küçük</div>
+      <div style={{fontSize:13,color:'#64748b'}}>ISDBM metodolojisiyle yatırım kararlarınızı güçlendirin.</div>
+    </div>
+    <div style={{background:'linear-gradient(135deg,#1e3a5f,#0f172a)',borderRadius:14,padding:'20px 24px',marginBottom:20,color:'#fff',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:16}}>
+      <div>
+        <div style={{fontSize:18,fontWeight:700}}>Doğru Lokasyon → Doğru Yatırım</div>
+        <div style={{fontSize:12,color:'#94a3b8',marginTop:6}}>Parsel bilgilerinizi girin, ISDBM skoru ve yatırım alternatifleri otomatik hesaplansın.</div>
+        <button className="btn btn-primary" style={{marginTop:14}} onClick={()=>goNav('newproject')}>+ Yeni Yatırım Analizi</button>
+      </div>
+      <div style={{fontSize:52}}>🏙️</div>
+    </div>
+    <div style={{display:'flex',gap:12,marginBottom:20,flexWrap:'wrap'}}>
+      {[['Toplam Proje',projects.length],['Tamamlanan',projects.filter(p=>p.status==='Tamamlandı').length],['Ort. ISDBM Skoru',projects.length?Math.round(projects.reduce((s,p)=>s+p.score,0)/projects.length):0],['Raporlar',projects.length]].map(([l,v])=>(
+        <div key={l} className="stat-card"><div style={{fontSize:11,color:'#64748b',marginBottom:4}}>{l}</div><div style={{fontSize:22,fontWeight:700}}>{v}</div></div>
+      ))}
+    </div>
+    <div className="card">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+        <div style={{fontWeight:700,fontSize:15}}>Son Projeler</div>
+        <span style={{color:'#2563eb',fontSize:13,cursor:'pointer'}} onClick={()=>goNav('projects')}>Tümünü Gör →</span>
+      </div>
+      {projects.length===0?<div style={{textAlign:'center',color:'#94a3b8',padding:'24px 0',fontSize:14}}>Henüz proje yok. Yeni analiz başlatın.</div>:
+      <table className="data-table">
+        <thead><tr><th>Proje</th><th>Lokasyon</th><th style={{textAlign:'center'}}>ISDBM</th><th>Durum</th><th style={{textAlign:'right'}}>Tarih</th></tr></thead>
+        <tbody>{projects.map(p=>(
+          <tr key={p.id} style={{cursor:'pointer'}} onClick={()=>{
+            setParcel({...p.parcelData}); setMetrics({...p.metrics}); setSelectedAlt(null);
+            setStep(4); setScreen('newproject'); setActiveNav('newproject');
+          }}>
+            <td style={{fontWeight:500}}>{p.name}</td>
+            <td style={{color:'#64748b'}}>{p.location}</td>
+            <td style={{textAlign:'center'}}><Badge score={p.score}/></td>
+            <td><span style={{fontSize:12,color:p.status==='Tamamlandı'?'#16a34a':'#d97706',fontWeight:500}}>{p.status}</span></td>
+            <td style={{textAlign:'right',color:'#94a3b8'}}>{p.date}</td>
+          </tr>
+        ))}</tbody>
+      </table>}
+    </div>
+  </Shell>;
+
+  // ── Projects ─────────────────────────────────────────────────────────────
+  if(screen==='projects') return <Shell nav="projects">
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+      <div style={{fontSize:18,fontWeight:700}}>Tüm Projeler</div>
+      <button className="btn btn-primary" onClick={()=>goNav('newproject')}>+ Yeni Proje</button>
+    </div>
+    {projects.length===0?<div className="card" style={{textAlign:'center',color:'#94a3b8',padding:'40px 0'}}>Henüz proje yok.</div>:
+    <div style={{display:'flex',flexDirection:'column',gap:12}}>
+      {projects.map(p=>(
+        <div key={p.id} className="card" style={{display:'flex',alignItems:'center',gap:16,cursor:'pointer'}}
+          onClick={()=>{setParcel({...p.parcelData});setMetrics({...p.metrics});setSelectedAlt(null);setStep(4);setScreen('newproject');setActiveNav('newproject');}}>
+          <ScoreRing score={p.score} size={64} color={scoreColor(p.score)}/>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:14}}>{p.name}</div>
+            <div style={{fontSize:12,color:'#64748b'}}>{p.location} — Ada/Parsel: {p.parcel}</div>
+            <div style={{fontSize:11,color:'#94a3b8',marginTop:2}}>{p.date}</div>
+          </div>
+          <div>
+            <span style={{fontSize:12,color:p.status==='Tamamlandı'?'#16a34a':'#d97706',fontWeight:600,background:p.status==='Tamamlandı'?'#dcfce7':'#fef3c7',padding:'3px 10px',borderRadius:20}}>{p.status}</span>
+          </div>
+          <span style={{color:'#94a3b8',fontSize:18}}>›</span>
+        </div>
+      ))}
+    </div>}
+  </Shell>;
+
+  // ── Reports ───────────────────────────────────────────────────────────────
+  if(screen==='reports') return <Shell nav="reports">
+    <div style={{fontSize:18,fontWeight:700,marginBottom:20}}>Raporlar</div>
+    {projects.length===0?<div className="card" style={{textAlign:'center',color:'#94a3b8',padding:'40px 0'}}>Henüz rapor yok. Proje analizi tamamlayın.</div>:
+    <div style={{display:'flex',flexDirection:'column',gap:12}}>
+      {projects.map(p=>(
+        <div key={p.id} className="card" style={{display:'flex',alignItems:'center',gap:16}}>
+          <div style={{fontSize:36}}>📋</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700}}>{p.name} — ISDBM Analiz Raporu</div>
+            <div style={{fontSize:12,color:'#64748b'}}>{p.location} | Ada/Parsel: {p.parcel} | Skor: {p.score}</div>
+            <div style={{fontSize:11,color:'#94a3b8'}}>{p.date}</div>
+          </div>
+          <button className="btn btn-primary" onClick={()=>{
+            const alts=calcAlternatives(p.metrics,p.parcelData?.alan);
+            generatePDF(p.parcelData||{ada:p.parcel.split('/')[0].trim(),parsel:p.parcel.split('/')[1]?.trim(),il:p.location.split('/')[1]?.trim()||'',ilce:p.location.split('/')[0]?.trim()||''},p.metrics,alts,p.score);
+          }}>📥 PDF İndir</button>
+        </div>
+      ))}
+    </div>}
+  </Shell>;
+
+  // ── Map ───────────────────────────────────────────────────────────────────
+  if(screen==='mapscreen') return <Shell nav="map" noPad>
+    <LeafletMap activeParcel={activeParcel}/>
+  </Shell>;
+
+  // ── New Project Wizard ────────────────────────────────────────────────────
+  if(screen==='newproject') {
+    const STEPS=['Parsel Bilgileri','Metrik Analizi','Yatırım Alternatifleri','Sonuç & Rapor'];
+
+    return <Shell nav="newproject">
+      {/* Step bar */}
+      <div style={{display:'flex',alignItems:'center',marginBottom:24,flexWrap:'wrap',gap:4}}>
+        {STEPS.map((s,i)=>(
+          <React.Fragment key={i}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,cursor:i<step?'pointer':'default'}} onClick={()=>i<step&&setStep(i+1)}>
+              <div className="step-circle" style={{background:step>i+1?'#16a34a':step===i+1?'#2563eb':'#e2e8f0',color:step>=i+1?'#fff':'#94a3b8'}}>
+                {step>i+1?'✓':i+1}
+              </div>
+              <div style={{fontSize:11,color:step===i+1?'#2563eb':'#94a3b8',fontWeight:step===i+1?600:400,whiteSpace:'nowrap'}}>{s}</div>
+            </div>
+            {i<STEPS.length-1&&<div style={{flex:1,height:2,background:step>i+1?'#16a34a':'#e2e8f0',margin:'0 4px',marginBottom:18,minWidth:16}}/>}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Step 1: Parcel form */}
+      {step===1&&<div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+        <div className="card" style={{flex:'1 1 300px'}}>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:18}}>📍 Parsel Bilgileri</div>
+          <div className="form-group" style={{marginBottom:12}}>
+            <label>Proje Adı</label>
+            <input value={parcel.projeAdi} onChange={e=>setP('projeAdi',e.target.value)} placeholder="Örn: Pendik Data Center"/>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:12}}>
+            <div className="form-group"><label>İl</label>
+              <select value={parcel.il} onChange={e=>setP('il',e.target.value)}>
+                {Object.keys(IL_ILCE).map(il=><option key={il}>{il}</option>)}
+              </select>
+            </div>
+            <div className="form-group"><label>İlçe</label>
+              <select value={parcel.ilce} onChange={e=>setP('ilce',e.target.value)}>
+                {ilceler.map(i=><option key={i}>{i}</option>)}
+              </select>
+            </div>
+            <div className="form-group"><label>Mahalle</label>
+              <input value={parcel.mahalle} onChange={e=>setP('mahalle',e.target.value)}/>
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:12}}>
+            <div className="form-group"><label>Ada</label><input value={parcel.ada} onChange={e=>setP('ada',e.target.value)}/></div>
+            <div className="form-group"><label>Parsel</label><input value={parcel.parsel} onChange={e=>setP('parsel',e.target.value)}/></div>
+            <div className="form-group"><label>Alan (m²)</label><input type="number" value={parcel.alan} onChange={e=>setP('alan',e.target.value)}/></div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:20}}>
+            <div className="form-group"><label>Plan Durumu</label>
+              <select value={parcel.planDurumu} onChange={e=>setP('planDurumu',e.target.value)}>
+                {['Sanayi Bölgesi','Konut Bölgesi','Karma Kullanım','Ticaret Bölgesi','Tarım Arazisi','Orman Arazisi','Özel Proje Alanı','Belirsiz'].map(o=><option key={o}>{o}</option>)}
+              </select>
+            </div>
+            <div className="form-group"><label>Mevcut Kullanım</label>
+              <select value={parcel.mevcutKullanim} onChange={e=>setP('mevcutKullanim',e.target.value)}>
+                {['Boş Arsa','Tarım Arazisi','Eski Yapı','Depo/Fabrika','Konut','Ticari Yapı'].map(o=><option key={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            <button className="btn btn-secondary" style={{flex:1}} onClick={()=>{
+              setActiveParcel({lat:40.9267,lng:29.1200,label:`${parcel.ada}/${parcel.parsel}`,coords:parcelCoords(40.9267,29.1200)});
+              setScreen('mapscreen');setActiveNav('map');
+            }}>🗺️ Haritada Gör</button>
+            <button className="btn btn-primary" style={{flex:2}} onClick={()=>setStep(2)}>Metrik Analizine Geç →</button>
+          </div>
+        </div>
+        {/* Mini map */}
+        <div style={{flex:'1 1 280px',borderRadius:12,overflow:'hidden',minHeight:320,display:'flex',flexDirection:'column'}}>
+          <LeafletMap activeParcel={{lat:40.9267,lng:29.1200,label:`${parcel.ada}/${parcel.parsel}`,coords:parcelCoords(40.9267,29.1200)}}/>
+        </div>
+      </div>}
+
+      {/* Step 2: Metric sliders */}
+      {step===2&&<div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+        <div className="card" style={{flex:'2 1 340px'}}>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>📊 Metrik Değerlendirmesi</div>
+          <div style={{fontSize:13,color:'#64748b',marginBottom:20}}>Her metrik için 0-100 arasında puan girin. Ağırlıklı ortalama ile ISDBM skoru hesaplanacak.</div>
+          {METRICS.map(m=><MetricSlider key={m.key} metric={m} value={metrics[m.key]||50} onChange={setMetric}/>)}
+          <div style={{display:'flex',gap:10,marginTop:8}}>
+            <button className="btn btn-secondary" style={{flex:1}} onClick={()=>setStep(1)}>← Geri</button>
+            <button className="btn btn-primary" style={{flex:2}} onClick={()=>setStep(3)}>Alternatifleri Gör →</button>
+          </div>
+        </div>
+        {/* Live score */}
+        <div style={{flex:'1 1 200px',display:'flex',flexDirection:'column',gap:14}}>
+          <div className="card" style={{textAlign:'center'}}>
+            <div style={{fontSize:12,color:'#64748b',marginBottom:8,fontWeight:500}}>ISDBM SKORU</div>
+            <ScoreRing score={isdbmScore} size={100} color={scoreColor(isdbmScore)}/>
+            <div style={{marginTop:8,fontSize:13,fontWeight:700,color:scoreColor(isdbmScore)}}>{scoreLabel(isdbmScore)}</div>
+            <div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>Ağırlıklı bütünleşik skor</div>
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,fontSize:13,marginBottom:10}}>Metrik Özeti</div>
+            {METRICS.map(m=>(
+              <div key={m.key} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid #f8fafc',fontSize:12}}>
+                <span style={{color:'#64748b'}}>{m.icon} {m.label}</span>
+                <span style={{fontWeight:700,color:scoreColor(metrics[m.key]||50)}}>{metrics[m.key]||50}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>}
+
+      {/* Step 3: Alternatives */}
+      {step===3&&<div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+        <div style={{flex:'2 1 340px'}}>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>🏗️ Yatırım Alternatifleri</div>
+          <div style={{fontSize:13,color:'#64748b',marginBottom:14}}>Metrik skorlarınıza göre sıralanmış yatırım alternatifleri. Birini seçerek devam edin.</div>
+          {alternatives.map((alt,i)=>(
+            <div key={alt.name} className={`alt-card${selectedAlt?.name===alt.name?' selected':''}`} onClick={()=>setSelectedAlt(alt)}>
+              <div className="alt-rank" style={{background:i===0?'#eff6ff':i===1?'#f0fdf4':'#f8fafc',color:i===0?'#2563eb':i===1?'#16a34a':'#64748b'}}>{i+1}</div>
+              <div style={{fontSize:22}}>{alt.icon}</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:13}}>{alt.name}</div>
+                <div style={{fontSize:11,color:'#94a3b8',marginTop:2}}>CAPEX: {alt.capex} | ROI: {alt.roi} | Süre: {alt.sure}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <Badge score={alt.score}/>
+                <div style={{fontSize:11,color:alt.uygColor,fontWeight:600,marginTop:4}}>{alt.uyg}</div>
+              </div>
+            </div>
+          ))}
+          <div style={{display:'flex',gap:10,marginTop:8}}>
+            <button className="btn btn-secondary" style={{flex:1}} onClick={()=>setStep(2)}>← Geri</button>
+            <button className="btn btn-primary" style={{flex:2,opacity:selectedAlt?1:.5}} onClick={()=>selectedAlt&&setStep(4)}>
+              {selectedAlt?`"${selectedAlt.name}" — Detay →`:'Alternatif Seçin'}
+            </button>
+          </div>
+        </div>
+        <div style={{flex:'1 1 200px'}}>
+          <div className="card" style={{textAlign:'center',marginBottom:14}}>
+            <div style={{fontSize:12,color:'#64748b',marginBottom:8}}>GENEL ISDBM SKORU</div>
+            <ScoreRing score={isdbmScore} size={90} color={scoreColor(isdbmScore)}/>
+            <div style={{fontSize:12,color:scoreColor(isdbmScore),fontWeight:700,marginTop:6}}>{scoreLabel(isdbmScore)}</div>
+          </div>
+          {selectedAlt&&<div className="card">
+            <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>Seçili: {selectedAlt.icon} {selectedAlt.name}</div>
+            {[['ISDBM Skoru',selectedAlt.score],['CAPEX',selectedAlt.capex],['ROI',selectedAlt.roi],['IRR',selectedAlt.irr],['Geliştirme Süresi',selectedAlt.sure],['Kapasite',selectedAlt.kapasite]].map(([k,v])=>(
+              <InfoRow key={k} k={k} v={String(v)}/>
+            ))}
+          </div>}
+        </div>
+      </div>}
+
+      {/* Step 4: Result + PDF */}
+      {step===4&&<div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+        {/* Left: selected investment */}
+        <div style={{flex:'1 1 240px',background:'linear-gradient(135deg,#0f172a,#1e3a5f)',borderRadius:14,padding:24,color:'#fff',display:'flex',flexDirection:'column',gap:10}}>
+          <div style={{fontSize:10,background:'#16a34a',display:'inline-block',borderRadius:4,padding:'3px 8px',fontWeight:700,alignSelf:'flex-start'}}>
+            {selectedAlt?'Seçili Yatırım':'En İyi Alternatif'}
+          </div>
+          <div style={{fontSize:18,fontWeight:800}}>{selectedAlt?.name||alternatives[0]?.name}</div>
+          <div style={{fontSize:11,color:'#94a3b8'}}>ISDBM Investment Score</div>
+          <ScoreRing score={selectedAlt?.score||alternatives[0]?.score||isdbmScore} size={90} color="#3b82f6"/>
+          <div style={{fontSize:12,color:'#60a5fa',fontWeight:600}}>{scoreLabel(selectedAlt?.score||isdbmScore)}</div>
+          <div style={{borderTop:'1px solid #1e3a5f',paddingTop:10,marginTop:4}}>
+            {selectedAlt&&[['CAPEX',selectedAlt.capex],['ROI',selectedAlt.roi],['IRR',selectedAlt.irr],['Süre',selectedAlt.sure]].map(([k,v])=>(
+              <div key={k} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'4px 0',borderBottom:'1px solid #1e3a5f'}}>
+                <span style={{color:'#94a3b8'}}>{k}</span><span style={{fontWeight:600}}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <button className="btn btn-success btn-block" style={{marginTop:8}} onClick={()=>{saveProject();alert('Proje kaydedildi!');}}>💾 Projeyi Kaydet</button>
+          <button className="btn btn-block" style={{background:'#3b82f6',color:'#fff'}} onClick={()=>{
+            generatePDF(parcel,metrics,alternatives,isdbmScore);
+          }}>📥 PDF Rapor İndir</button>
+        </div>
+
+        {/* Right: full summary */}
+        <div style={{flex:'2 1 320px',display:'flex',flexDirection:'column',gap:14}}>
+          <div className="card">
+            <div style={{fontWeight:700,fontSize:14,marginBottom:14}}>📋 Parsel Özeti</div>
+            {[['Proje Adı',parcel.projeAdi||'—'],['İl / İlçe',`${parcel.il} / ${parcel.ilce}`],['Mahalle',parcel.mahalle],
+              ['Ada / Parsel',`${parcel.ada} / ${parcel.parsel}`],['Alan',`${Number(parcel.alan).toLocaleString('tr-TR')} m²`],
+              ['Plan Durumu',parcel.planDurumu],['Mevcut Kullanım',parcel.mevcutKullanim]].map(([k,v])=><InfoRow key={k} k={k} v={v}/>)}
+          </div>
+          <div className="card">
+            <div style={{fontWeight:700,fontSize:14,marginBottom:14}}>📊 Analiz Metrikleri</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              {METRICS.map(m=>(
+                <div key={m.key} style={{display:'flex',alignItems:'center',gap:10,background:'#f8fafc',borderRadius:8,padding:'10px 12px'}}>
+                  <ScoreRing score={metrics[m.key]||50} size={48} color={scoreColor(metrics[m.key]||50)}/>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:600}}>{m.label}</div>
+                    <div style={{fontSize:11,color:scoreColor(metrics[m.key]||50),fontWeight:500}}>{metrics[m.key]>=85?'Çok İyi':metrics[m.key]>=70?'İyi':metrics[m.key]>=50?'Orta':'Zayıf'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="card">
+            <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>🏆 Tüm Alternatifler</div>
+            <table className="data-table">
+              <thead><tr><th>#</th><th>Alternatif</th><th style={{textAlign:'center'}}>Skor</th><th>Uygunluk</th><th style={{textAlign:'right'}}>CAPEX</th></tr></thead>
+              <tbody>{alternatives.map((alt,i)=>(
+                <tr key={alt.name} style={{background:selectedAlt?.name===alt.name?'#eff6ff':'transparent'}}>
+                  <td style={{color:'#94a3b8'}}>{i+1}</td>
+                  <td><span style={{marginRight:6}}>{alt.icon}</span>{alt.name}</td>
+                  <td style={{textAlign:'center'}}><Badge score={alt.score}/></td>
+                  <td style={{color:alt.uygColor,fontWeight:600,fontSize:12}}>{alt.uyg}</td>
+                  <td style={{textAlign:'right',color:'#64748b',fontSize:12}}>{alt.capex}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            <button className="btn btn-secondary" style={{flex:1}} onClick={()=>setStep(3)}>← Alternatiflere Dön</button>
+            <button className="btn btn-primary" style={{flex:1}} onClick={()=>goNav('reports')}>📄 Raporlarım</button>
+          </div>
+        </div>
+      </div>}
+    </Shell>;
+  }
+
+  return null;
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
