@@ -497,6 +497,164 @@ function generatePDF(parcel,alts,isdbmScore){
   doc.save(`ISDBM_${(parcel.projeAdi||parcel.ada||"Rapor").replace(/\s/g,"_")}_${new Date().toISOString().slice(0,10)}.pdf`);
 }
 
+// ── AI Screen Component ────────────────────────────────────────────────────
+const AIScreen=({parcels,selectedParcel})=>{
+  const [messages,setMessages]=useState([
+    {role:"assistant",text:"Merhaba! Ben ISDBM AI asistanınım. Parsellerin hakkında sorular sorabilir, yatırım analizi isteyebilir, skorları karşılaştırabilirsin. Nasıl yardımcı olabilirim?"}
+  ]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [apiKey,setApiKey]=useState(()=>localStorage.getItem("isdbm_claude_key")||"");
+  const [showKeyInput,setShowKeyInput]=useState(false);
+  const bottomRef=useRef(null);
+
+  useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[messages]);
+
+  const parcelContext=parcels.length>0?`
+Kullanıcının kayıtlı parselleri:
+${parcels.map(p=>`- ${p.projeAdi||"İsimsiz"} | ${p.il}/${p.ilce} | Alan: ${p.alan||0}m² | ISDBM Skoru: ${p.score||0} | Metrikler: Ulaşım:${p.metrics?.ulasim||"-"} Demografi:${p.metrics?.demografi||"-"} Ticari:${p.metrics?.ticari||"-"} Altyapı:${p.metrics?.altyapi||"-"} Risk:${p.metrics?.risk||"-"} Gelişme:${p.metrics?.gelisme||"-"}`).join("\n")}
+`:"Henüz kayıtlı parsel yok.";
+
+  const systemPrompt=`Sen ISDBM Digital platformunun AI asistanısın. ARGEPLANO şirketi için çalışıyorsun.
+ISDBM (Integrated Site Development & Business Model) metodolojisi: 6 metrik üzerinden 0-100 arası skor:
+- Ulaşım (%20): metro, otoyol, liman, havalimanı erişimi
+- Demografi (%15): nüfus yoğunluğu, büyüme, gelir
+- Ticari Potansiyel (%20): ticaret hacmi, sektör uyumu
+- Altyapı (%20): elektrik, su, doğalgaz, internet
+- Risk (%10): deprem, hukuki, pazar riski
+- Gelişme Potansiyeli (%15): imar, bölge gelişim planları
+
+Yatırım alternatifleri: Data Center, Lojistik Merkezi, Teknoloji Kampüsü, Karma Kullanım, AVM, Otel, Konut, Endüstriyel Tesis.
+
+${parcelContext}
+
+Türkçe yanıt ver. Kısa ve net ol. Sayısal analizlerde somut yorum yap.`;
+
+  const sendMessage=async()=>{
+    const q=input.trim(); if(!q||loading) return;
+    setInput("");
+    const newMessages=[...messages,{role:"user",text:q}];
+    setMessages(newMessages);
+    setLoading(true);
+
+    if(!apiKey){
+      setMessages(prev=>[...prev,{role:"assistant",text:"API anahtarı gerekli. Sağ üstteki '🔑 API Key' butonuna tıklayıp Claude API anahtarınızı girin."}]);
+      setLoading(false);
+      return;
+    }
+
+    try{
+      const resp=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-6",
+          max_tokens:1024,
+          system:systemPrompt,
+          messages:newMessages.map(m=>({role:m.role==="assistant"?"assistant":"user",content:m.text}))
+        })
+      });
+      const data=await resp.json();
+      if(data.error){
+        setMessages(prev=>[...prev,{role:"assistant",text:`Hata: ${data.error.message}`}]);
+      } else {
+        setMessages(prev=>[...prev,{role:"assistant",text:data.content?.[0]?.text||"Yanıt alınamadı."}]);
+      }
+    }catch(e){
+      setMessages(prev=>[...prev,{role:"assistant",text:`Bağlantı hatası: ${e.message}. API anahtarını ve internet bağlantısını kontrol edin.`}]);
+    }
+    setLoading(false);
+  };
+
+  const QUICK=[
+    "En yüksek skorlu parseli analiz et",
+    "Tüm parselleri karşılaştır",
+    "Data Center için hangi parsel uygun?",
+    "Risk skorları düşük parseller hangileri?",
+    "Yatırım öncelik sıramı belirle",
+  ];
+
+  return <div style={{display:"flex",flexDirection:"column",height:"100%",gap:0}}>
+    {/* Header */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+      <div>
+        <div style={{fontSize:18,fontWeight:700}}>🤖 ISDBM AI Asistanı</div>
+        <div style={{fontSize:12,color:"#64748b"}}>Claude Sonnet ile güçlendiriliyor — parsel verilerinizi analiz eder</div>
+      </div>
+      <button className="btn btn-secondary" style={{fontSize:12}} onClick={()=>setShowKeyInput(v=>!v)}>
+        🔑 {apiKey?"API Key ✓":"API Key Gir"}
+      </button>
+    </div>
+
+    {/* API Key input */}
+    {showKeyInput&&<div className="card" style={{marginBottom:14,background:"#fffbeb",border:"1px solid #fbbf24"}}>
+      <div style={{fontSize:12,fontWeight:600,marginBottom:8,color:"#92400e"}}>🔑 Claude API Anahtarı</div>
+      <div style={{display:"flex",gap:8}}>
+        <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)}
+          placeholder="sk-ant-api03-..." style={{flex:1,fontSize:12}}/>
+        <button className="btn btn-primary" style={{fontSize:12,whiteSpace:"nowrap"}} onClick={()=>{
+          localStorage.setItem("isdbm_claude_key",apiKey);
+          setShowKeyInput(false);
+        }}>Kaydet</button>
+        {apiKey&&<button className="btn btn-danger" style={{fontSize:12}} onClick={()=>{
+          setApiKey("");localStorage.removeItem("isdbm_claude_key");
+        }}>Sil</button>}
+      </div>
+      <div style={{fontSize:11,color:"#92400e",marginTop:6}}>
+        Anahtar tarayıcıda saklanır. <a href="https://console.anthropic.com/" target="_blank" style={{color:"#2563eb"}}>console.anthropic.com</a>'dan alabilirsiniz.
+      </div>
+    </div>}
+
+    {/* Quick actions */}
+    {parcels.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+      {QUICK.map((q,i)=><button key={i} className="btn btn-secondary" style={{fontSize:11,padding:"5px 10px"}}
+        onClick={()=>{setInput(q);}}>
+        {q}
+      </button>)}
+    </div>}
+
+    {/* Chat messages */}
+    <div style={{flex:1,overflowY:"auto",background:"#f8fafc",borderRadius:12,padding:16,minHeight:300,maxHeight:"calc(100vh - 420px)",display:"flex",flexDirection:"column",gap:12}}>
+      {messages.map((m,i)=>(
+        <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
+          <div style={{
+            maxWidth:"80%",padding:"10px 14px",borderRadius:m.role==="user"?"12px 12px 2px 12px":"12px 12px 12px 2px",
+            background:m.role==="user"?"#2563eb":"#fff",
+            color:m.role==="user"?"#fff":"#0f172a",
+            fontSize:13,lineHeight:1.6,
+            border:m.role==="assistant"?"1px solid #e2e8f0":"none",
+            boxShadow:m.role==="assistant"?"0 1px 4px rgba(0,0,0,.06)":"none",
+            whiteSpace:"pre-wrap",
+          }}>
+            {m.role==="assistant"&&<div style={{fontSize:10,color:"#94a3b8",marginBottom:4,fontWeight:600}}>🤖 ISDBM AI</div>}
+            {m.text}
+          </div>
+        </div>
+      ))}
+      {loading&&<div style={{display:"flex",justifyContent:"flex-start"}}>
+        <div style={{padding:"10px 14px",borderRadius:"12px 12px 12px 2px",background:"#fff",border:"1px solid #e2e8f0",fontSize:13,color:"#94a3b8"}}>
+          <span style={{animation:"pulse 1s infinite"}}>⏳ Analiz ediliyor…</span>
+        </div>
+      </div>}
+      <div ref={bottomRef}/>
+    </div>
+
+    {/* Input */}
+    <div style={{display:"flex",gap:10,marginTop:12}}>
+      <input value={input} onChange={e=>setInput(e.target.value)}
+        onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendMessage()}
+        placeholder={parcels.length>0?"Parseller hakkında soru sor…":"Önce haritadan parsel çiz, sonra AI ile analiz et…"}
+        style={{flex:1,fontSize:13,padding:"11px 14px"}}/>
+      <button className="btn btn-primary" onClick={sendMessage} disabled={loading||!input.trim()} style={{padding:"11px 20px",opacity:loading||!input.trim()?.5:1}}>
+        {loading?"⏳":"Gönder ↑"}
+      </button>
+    </div>
+    <div style={{fontSize:10,color:"#94a3b8",textAlign:"center",marginTop:6}}>
+      Claude Sonnet 4.6 · Parsel verilerin otomatik context olarak gönderilir · API anahtarın gerekmektedir
+    </div>
+  </div>;
+};
+
 // ── Parcel Form Component (hooks must be at top level) ────────────────────
 const ParcelForm=({parcel,onSave,onBack,Shell,toast,setToast})=>{
   const p=parcel;
@@ -560,8 +718,19 @@ const ParcelForm=({parcel,onSave,onBack,Shell,toast,setToast})=>{
         </div>
 
         {p.pois&&p.pois.length>0&&<div style={{marginBottom:12}}>
-          <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:6}}>📍 Yakın Çevre (1.5 km — Overpass)</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontSize:12,fontWeight:600,color:"#374151"}}>📍 Yakın Çevre (1.5 km — Overpass)</div>
+            <button className="btn btn-secondary" style={{fontSize:11,padding:"4px 10px"}} onClick={()=>{
+              const auto=autoScoreFromPOI(p.pois, form.alan||p.alan);
+              if(auto){
+                setMetrics(auto);
+              }
+            }}>
+              ⚡ Qbiq Metodolojisiyle Otomatik Hesapla
+            </button>
+          </div>
           <div style={{display:"flex",flexWrap:"wrap"}}>{p.pois.map((poi,i)=><span key={i} className="poi-chip">{poi.icon} {poi.name}</span>)}</div>
+          <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>POI verisi Overpass API • Metodoloji: Qbiq proximity band sistemi</div>
         </div>}
 
         {nufus&&<div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#16a34a"}}>
@@ -858,6 +1027,9 @@ const App=()=>{
         <div style={{marginLeft:"auto",display:"flex",gap:8}}>
           <button className="btn btn-secondary" onClick={()=>{setFlyTo({lat:p.lat,lng:p.lng});goNav("map");}}>🗺️ Haritada Gör</button>
           <button className="btn btn-secondary" onClick={()=>{setSelectedParcel(p);setScreen("parcel_form");}}>✏️ Düzenle</button>
+          <button className="btn" style={{background:"#7c3aed",color:"#fff"}} onClick={()=>{
+            setSelectedParcel(p);goNav("ai");
+          }}>🤖 AI Analiz</button>
           <button className="btn btn-danger" onClick={()=>deleteParcel(p.id)}>🗑️ Sil</button>
           <button className="btn btn-primary" onClick={()=>generatePDF(p,alts,score)}>📥 PDF İndir</button>
         </div>
@@ -987,6 +1159,11 @@ const App=()=>{
         })}</tbody>
       </table>
     </div>}
+  </Shell>;
+
+  // ── AI Screen ─────────────────────────────────────────────────────────
+  if(screen==="ai") return <Shell nav="ai">
+    <AIScreen parcels={parcels} selectedParcel={selectedParcel}/>
   </Shell>;
 
   // ── Reports ────────────────────────────────────────────────────────────
