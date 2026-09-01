@@ -108,14 +108,83 @@ const INV_TEMPLATES=[
   {name:"Endüstriyel Tesis",        icon:"🏭",scoreBonus:{altyapi:.25,ulasim:.25},capex:"30-80 M$",roi:"11-17%",irr:"13-19%",sure:"12-18 ay",kapasite:"Özelleştirilmiş"},
 ];
 
-// TÜİK nüfus verileri (2023)
+// TÜİK ADNKS 2023 — İl + İlçe nüfus verileri
 const TUIK_NUFUS={
-  "İstanbul":15655924,"Ankara":5782285,"İzmir":4479525,"Bursa":3194720,
-  "Antalya":2688004,"Kocaeli":2053743,"Konya":2321969,"Gaziantep":2220125,
-  "Mersin":1922871,"Adana":2274106,
+  "İstanbul":{il:15655924,ilceler:{"Bağcılar":762531,"Bahçelievler":620541,"Küçükçekmece":583165,"Pendik":563367,"Ümraniye":543118,"Esenler":494384,"Sultangazi":478560,"Gaziosmanpaşa":470279,"Esenyurt":467928,"Kâğıthane":459676,"Maltepe":459491,"Kartal":467782,"Kadıköy":432580,"Ataşehir":410274,"Beylikdüzü":368149,"Başakşehir":363540,"Avcılar":361704,"Üsküdar":522024,"Şişli":299815,"Fatih":441396,"Beyoğlu":243396,"Bakırköy":222270,"Bayrampaşa":271188,"Büyükçekmece":259524,"Arnavutköy":282063,"Tuzla":253977,"Sarıyer":346373,"Güngören":295865,"Zeytinburnu":293296,"Eyüpsultan":386578,"Beşiktaş":175546,"Çekmeköy":254126,"Silivri":201398,"Beykoz":249317,"Sultanbeyli":337885,"Sancaktepe":374951,"Çatalca":89457,"Adalar":17239,"Şile":39918}},
+  "Ankara":{il:5782285,ilceler:{"Çankaya":957280,"Keçiören":863558,"Yenimahalle":692784,"Mamak":612437,"Etimesgut":495109,"Sincan":411671,"Altındağ":323946,"Pursaklar":148936,"Gölbaşı":137456,"Polatlı":132872,"Kazan":101230,"Çubuk":82341,"Elmadağ":53218,"Beypazarı":46712,"Haymana":42156,"Nallıhan":28341,"Kızılcahamam":34219,"Kalecik":20134,"Bala":27890,"Güdül":14230}},
+  "İzmir":{il:4479525,ilceler:{"Buca":490221,"Karabağlar":423840,"Bornova":410543,"Konak":364219,"Çiğli":306418,"Bayraklı":320456,"Karşıyaka":307849,"Gaziemir":151230,"Menemen":140326,"Torbalı":130218,"Balçova":98431,"Narlıdere":72340,"Kemalpaşa":120430,"Seferihisar":51230,"Urla":66540,"Aliağa":94230,"Bergama":108540,"Dikili":38210,"Foça":30120,"Güzelbahçe":42310}},
+  "Bursa":{il:3194720,ilceler:{"Osmangazi":889340,"Nilüfer":521430,"Yıldırım":476210,"İnegöl":232450,"Gemlik":97230,"Mudanya":87430,"Gürsu":78230,"Kestel":64230,"Mustafakemalpaşa":90120,"Karacabey":75430,"Orhangazi":72310,"İznik":42310,"Büyükorhan":17230,"Harmancık":9430,"Keles":11230,"Orhaneli":15430}},
+  "Antalya":{il:2688004,ilceler:{"Muratpaşa":695210,"Kepez":542310,"Konyaaltı":234510,"Alanya":342510,"Manavgat":191230,"Aksu":182310,"Serik":134510,"Döşemealtı":63210,"Kemer":36510,"Finike":28310,"Gazipaşa":45210,"Kaş":27310,"Elmalı":43210,"Korkuteli":53210,"Kumluca":56210}},
+  "Kocaeli":{il:2053743,ilceler:{"İzmit":345210,"Gebze":487210,"Körfez":134210,"Darıca":185210,"Çayırova":193210,"Gölcük":138210,"Başiskele":167210,"Dilovası":56210,"Kartepe":123210,"Kandıra":32210,"Karamürsel":51210,"Derince":98210}},
+  "Konya":{il:2321969,ilceler:{"Selçuklu":592310,"Meram":283410,"Karatay":234510,"Ereğli":147210,"Akşehir":102310,"Beyşehir":84210,"Seydişehir":56210,"Ilgın":52310,"Çumra":68210,"Kulu":54310,"Cihanbeyli":43210,"Sarayönü":33210}},
+  "Gaziantep":{il:2220125,ilceler:{"Şahinbey":892310,"Şehitkamil":723410,"Nizip":147210,"Islahiye":63210,"Nurdağı":47210,"Oğuzeli":38210,"Araban":32210,"Karkamış":28210,"Yavuzeli":26210}},
+  "Mersin":{il:1922871,ilceler:{"Yenişehir":432310,"Akdeniz":384210,"Mezitli":284210,"Toroslar":347210,"Tarsus":271210,"Silifke":112210,"Erdemli":128210,"Anamur":63210,"Mut":52210,"Gülnar":34210,"Bozyazı":28210}},
+  "Adana":{il:2274106,ilceler:{"Seyhan":632310,"Yüreğir":484210,"Çukurova":341210,"Sarıçam":234210,"Kozan":147210,"Ceyhan":178210,"İmamoğlu":47210,"Karataş":23210,"Pozantı":18210}},
+  "Sakarya":{il:1082446,ilceler:{"Adapazarı":291210,"Serdivan":189210,"Erenler":143210,"Arifiye":92210,"Hendek":74210,"Sapanca":73210,"Karasu":63210,"Akyazı":69210}},
+  "Trabzon":{il:811901,ilceler:{"Ortahisar":187210,"Akçaabat":102310,"Arsin":57210,"Araklı":54210,"Of":68210,"Yomra":83210,"Sürmene":42210}},
+  "Diyarbakır":{il:1801649,ilceler:{"Bağlar":551210,"Sur":82210,"Kayapınar":384210,"Yenişehir":267210,"Bismil":128210,"Ergani":92210,"Silvan":87210,"Çınar":52210}},
+  "Şanlıurfa":{il:2201765,ilceler:{"Karaköprü":342210,"Eyyübiye":413210,"Haliliye":523210,"Siverek":247210,"Viranşehir":193210,"Birecik":102210,"Suruç":87210,"Harran":63210}},
+  "Hatay":{il:1648060,ilceler:{"Antakya":258210,"İskenderun":232410,"Defne":189210,"Arsuz":98210,"Samandağ":82210,"Kırıkhan":79210,"Dörtyol":73210,"Payas":43210}},
+  "Kayseri":{il:1441553,ilceler:{"Melikgazi":512310,"Kocasinan":384210,"Talas":134210,"Hacılar":43210,"İncesu":38210,"Develi":68210,"Bünyan":37210}},
+  "Eskişehir":{il:916344,ilceler:{"Odunpazarı":384210,"Tepebaşı":342210,"Sivrihisar":34210,"Mahmudiye":18210,"Mihalıççık":12210}},
+  "Samsun":{il:1345874,ilceler:{"Atakum":284210,"İlkadım":378210,"Canik":132210,"Tekkeköy":89210,"Bafra":138210,"Çarşamba":112210}},
+  "Denizli":{il:1041731,ilceler:{"Pamukkale":292310,"Merkezefendi":278210,"Acıpayam":68210,"Tavas":52210,"Çivril":47210,"Buldan":32210}},
+  "Manisa":{il:1421347,ilceler:{"Yunusemre":312410,"Şehzadeler":287210,"Akhisar":134210,"Turgutlu":128210,"Salihli":112210,"Soma":68210}},
+  "Balıkesir":{il:1239742,ilceler:{"Altıeylül":192310,"Karesi":178210,"Bandırma":132210,"Edremit":82210,"Burhaniye":52210,"Gönen":43210}},
+  "Tekirdağ":{il:1100547,ilceler:{"Süleymanpaşa":312410,"Ergene":134210,"Çorlu":287210,"Malkara":47210,"Muratlı":38210,"Çerkezköy":98210}},
+  "Muğla":{il:1060780,ilceler:{"Menteşe":128210,"Bodrum":147210,"Marmaris":63210,"Fethiye":147210,"Milas":84210,"Seydikemer":43210}},
+  "Kırklareli":{il:374632,ilceler:{"Merkez":87210,"Lüleburgaz":123210,"Babaeski":43210,"Vize":24210}},
+  "Edirne":{il:416006,ilceler:{"Merkez":147210,"Keşan":68210,"Uzunköprü":47210,"İpsala":24210}},
+  "Çanakkale":{il:566001,ilceler:{"Merkez":104210,"Biga":68210,"Çan":43210,"Gelibolu":32210}},
+  "Aydın":{il:1102948,ilceler:{"Efeler":234210,"Nazilli":132210,"Kuşadası":84210,"Didim":63210,"Söke":82210}},
+  "İçel":{il:0,ilceler:{}},
 };
 
+// Nüfus verisi al — önce OSM dene, sonra statik JSON
+async function fetchNufusData(lat, lng, il, ilce) {
+  // 1) OSM Overpass — population tag
+  const query=`[out:json][timeout:10];
+(
+  relation["name"="${ilce}"]["admin_level"="7"](around:30000,${lat},${lng});
+  relation["name"="${ilce}"]["admin_level"="8"](around:30000,${lat},${lng});
+  relation["name"="${il}"]["admin_level"="4"];
+);
+out tags;`;
+  try {
+    const r=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
+    const d=await r.json();
+    let osmIlNufus=null, osmIlceNufus=null, osmMahalleNufus=null;
+    d.elements?.forEach(el=>{
+      const pop=parseInt(el.tags?.population||"0");
+      if(!pop) return;
+      if(el.tags?.name===il) osmIlNufus=pop;
+      if(el.tags?.name===ilce) osmIlceNufus=pop;
+    });
+    if(osmIlNufus||osmIlceNufus){
+      return {
+        il: osmIlNufus||TUIK_NUFUS[il]?.il||null,
+        ilce: osmIlceNufus||TUIK_NUFUS[il]?.ilceler?.[ilce]||null,
+        mahalle: osmMahalleNufus||null,
+        kaynak: osmIlNufus?"OSM+TÜİK":"TÜİK(OSM kısmi)",
+      };
+    }
+  } catch(e) {}
+
+  // 2) Statik TÜİK JSON fallback
+  const ilData=TUIK_NUFUS[il];
+  if(ilData) {
+    return {
+      il: ilData.il||null,
+      ilce: ilData.ilceler?.[ilce]||null,
+      mahalle: null,
+      kaynak:"TÜİK ADNKS 2023",
+    };
+  }
+  return null;
+}
+
 const STORAGE_KEY="isdbm_parcels_v2";
+
 
 function saveToLocal(parcels){
   try{localStorage.setItem(STORAGE_KEY,JSON.stringify(parcels));}catch(e){}
@@ -484,9 +553,14 @@ function generatePDF(parcel,alts,isdbmScore){
   }
 
   if(parcel.il&&TUIK_NUFUS[parcel.il]){
-    txt("NÜFUS VERİSİ (TÜİK 2023)",mg,11,true,[15,23,42]);
+    txt("NÜFUS VERİSİ (TÜİK ADNKS 2023)",mg,11,true,[15,23,42]);
+    const ilN=TUIK_NUFUS[parcel.il]?.il;
+    const ilceN=TUIK_NUFUS[parcel.il]?.ilceler?.[parcel.ilce];
     doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(15,23,42);
-    doc.text(`${parcel.il} İl Nüfusu: ${TUIK_NUFUS[parcel.il].toLocaleString("tr-TR")} kişi`,mg,y);y+=8;hl();
+    if(ilN) { doc.text(`${parcel.il} İl Nüfusu: ${ilN.toLocaleString("tr-TR")} kişi`,mg,y);y+=7; }
+    if(ilceN) { doc.text(`${parcel.ilce} İlçe Nüfusu: ${ilceN.toLocaleString("tr-TR")} kişi`,mg,y);y+=7; }
+    if(ilN&&ilceN) { doc.text(`İlçe yoğunluğu: %${Math.round(ilceN/ilN*100)} (il nüfusunun)`,mg,y);y+=7; }
+    y+=2;hl();
   }
 
   doc.setFontSize(7);doc.setTextColor(148,163,184);
@@ -496,6 +570,207 @@ function generatePDF(parcel,alts,isdbmScore){
 
   doc.save(`ISDBM_${(parcel.projeAdi||parcel.ada||"Rapor").replace(/\s/g,"_")}_${new Date().toISOString().slice(0,10)}.pdf`);
 }
+
+// ── Finansman Hesap Motoru ─────────────────────────────────────────────────
+const FinansmanHesap=({alt,parcel})=>{
+  const parseCapexMid=(str)=>{
+    if(!str)return 50000000;
+    const nums=str.replace(/[^0-9\-]/g,'').split('-').map(Number).filter(Boolean);
+    const mid=nums.length>1?(nums[0]+nums[1])/2:nums[0]||50;
+    return mid*1000000; // M$ → $, sonra kur ile TL
+  };
+  const parseROIMid=(str)=>{
+    if(!str)return 12;
+    const nums=str.replace(/[^0-9\-\.]/g,'').split('-').map(Number).filter(Boolean);
+    return nums.length>1?(nums[0]+nums[1])/2:nums[0]||12;
+  };
+
+  const [capex,setCapex]=useState(()=>Math.round(parseCapexMid(alt?.capex)*32));
+  const [ozkaynakOran,setOzkaynakOran]=useState(30);
+  const [krediVade,setKrediVade]=useState(10);
+  const [krediFaiz,setKrediFaiz]=useState(40);
+  const [yillikGetiriOran,setYillikGetiriOran]=useState(()=>parseROIMid(alt?.roi));
+  const [activeTab,setActiveTab]=useState('ozet');
+
+  const ozkaynakTutar=Math.round(capex*(ozkaynakOran/100));
+  const krediTutar=capex-ozkaynakTutar;
+  const aylikFaizOran=krediFaiz/100/12;
+  const toplamAy=krediVade*12;
+  const aylikTaksit=krediTutar>0&&aylikFaizOran>0
+    ?Math.round(krediTutar*(aylikFaizOran*Math.pow(1+aylikFaizOran,toplamAy))/(Math.pow(1+aylikFaizOran,toplamAy)-1))
+    :krediTutar>0?Math.round(krediTutar/toplamAy):0;
+
+  const yillikGetiriTutar=Math.round(capex*(yillikGetiriOran/100));
+  const aylikGetiri=Math.round(yillikGetiriTutar/12);
+  const aylikNet=aylikGetiri-aylikTaksit;
+  const toplamFaiz=Math.max(0,aylikTaksit*toplamAy-krediTutar);
+  const geriDonus=aylikNet>0?(capex/(aylikNet*12)).toFixed(1):"—";
+  const ozROI=ozkaynakTutar>0?((yillikGetiriTutar-aylikTaksit*12)/ozkaynakTutar*100).toFixed(1):yillikGetiriOran;
+
+  const projeksiyon=Array.from({length:10},(_,i)=>{
+    const y=i+1;
+    const taksit=y<=krediVade?aylikTaksit*12:0;
+    const net=yillikGetiriTutar-taksit;
+    const kumulatif=(yillikGetiriTutar*y)-(Math.min(y,krediVade)*aylikTaksit*12);
+    return {y,getiri:yillikGetiriTutar,taksit,net,kumulatif};
+  });
+
+  const fmt=n=>{
+    const abs=Math.abs(n);
+    const s=n<0?'-':'';
+    if(abs>=1000000000)return s+(abs/1000000000).toFixed(1)+'B ₺';
+    if(abs>=1000000)return s+(abs/1000000).toFixed(1)+'M ₺';
+    if(abs>=1000)return s+(abs/1000).toFixed(0)+'K ₺';
+    return s+abs.toLocaleString('tr-TR')+' ₺';
+  };
+  const fmtSign=n=>(n>=0?'+':'')+fmt(n);
+  const c=n=>n>=0?'#16a34a':'#ef4444';
+
+  return <div style={{background:'#fff',borderRadius:14,padding:20,border:'1.5px solid #e2e8f0'}}>
+    <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>💰 Finansman & Nakit Akışı Analizi</div>
+    <div style={{fontSize:11,color:'#64748b',marginBottom:14}}>
+      AssetRevitalization metodolojisi • {alt?`${alt.icon} ${alt.name} için`:''} Kredi + Özkaynak karma finansman
+    </div>
+
+    {/* Tab bar */}
+    <div style={{display:'flex',gap:6,marginBottom:16,borderBottom:'1px solid #f1f5f9',paddingBottom:10}}>
+      {[['ozet','📊 Özet'],['parametreler','⚙️ Parametreler'],['projeksiyon','📈 10 Yıl']].map(([k,l])=>(
+        <button key={k} onClick={()=>setActiveTab(k)}
+          style={{padding:'5px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:'none',
+            background:activeTab===k?'#2563eb':'#f8fafc',color:activeTab===k?'#fff':'#374151'}}>
+          {l}
+        </button>
+      ))}
+    </div>
+
+    {/* Parametreler */}
+    {activeTab==='parametreler'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+      {[
+        ['Toplam CAPEX (₺)',capex,setCapex,'number',alt?.capex?`Öneri: ${alt.capex}`:''],
+        ['Yıllık Kredi Faizi (%)',krediFaiz,setKrediFaiz,'number','TL bazlı'],
+        ['Yıllık Getiri Oranı (%)',yillikGetiriOran,setYillikGetiriOran,'number',alt?.roi?`ISDBM önerisi: ${alt.roi}`:''],
+      ].map(([l,v,sv,t,hint])=>(
+        <div key={l}>
+          <label style={{fontSize:12,color:'#64748b',display:'block',marginBottom:4}}>{l}</label>
+          <input type={t} value={v} step={t==='number'?'any':1}
+            onChange={e=>sv(+e.target.value||0)}
+            style={{width:'100%',padding:'8px 10px',border:'1.5px solid #e2e8f0',borderRadius:8,fontSize:13,fontWeight:600,boxSizing:'border-box'}}/>
+          {hint&&<div style={{fontSize:10,color:'#94a3b8',marginTop:2}}>{hint}</div>}
+        </div>
+      ))}
+      <div>
+        <label style={{fontSize:12,color:'#64748b',display:'block',marginBottom:4}}>Özkaynak Oranı: %{ozkaynakOran}</label>
+        <input type="range" min="10" max="100" step="5" value={ozkaynakOran}
+          onChange={e=>setOzkaynakOran(+e.target.value)} style={{width:'100%'}}/>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#94a3b8'}}><span>%10</span><span>%100</span></div>
+      </div>
+      <div>
+        <label style={{fontSize:12,color:'#64748b',display:'block',marginBottom:4}}>Kredi Vadesi: {krediVade} yıl</label>
+        <input type="range" min="1" max="20" value={krediVade}
+          onChange={e=>setKrediVade(+e.target.value)} style={{width:'100%'}}/>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#94a3b8'}}><span>1</span><span>20 yıl</span></div>
+      </div>
+    </div>}
+
+    {/* Özet */}
+    {activeTab==='ozet'&&<div>
+      {/* Finansman yapısı */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:14}}>
+        {[['Toplam CAPEX',fmt(capex),'#0f172a'],['Özkaynak (%'+ozkaynakOran+')',fmt(ozkaynakTutar),'#2563eb'],['Banka Kredisi',fmt(krediTutar),'#ef4444']].map(([l,v,col])=>(
+          <div key={l} style={{background:'#f8fafc',borderRadius:10,padding:'11px 12px',textAlign:'center'}}>
+            <div style={{fontSize:10,color:'#64748b',marginBottom:3}}>{l}</div>
+            <div style={{fontSize:14,fontWeight:800,color:col}}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Aylık nakit akışı — AssetRevitalization mantığı */}
+      <div style={{background:'linear-gradient(135deg,#0f172a,#1e3a5f)',borderRadius:12,padding:16,color:'#fff',marginBottom:14}}>
+        <div style={{fontSize:11,color:'#94a3b8',marginBottom:10,fontWeight:600}}>📅 AYLIK NAKİT AKIŞI</div>
+        {[['(+) Aylık Getiri',fmt(aylikGetiri),'#86efac'],['(-) Kredi Taksiti',fmt(aylikTaksit),'#fca5a5']].map(([l,v,col])=>(
+          <div key={l} style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:8}}>
+            <span style={{color:'#94a3b8'}}>{l}</span>
+            <span style={{fontWeight:700,color:col}}>{v}</span>
+          </div>
+        ))}
+        <div style={{borderTop:'1px solid #1e3a5f',paddingTop:10,display:'flex',justifyContent:'space-between',fontSize:17,fontWeight:800}}>
+          <span>Net Aylık</span>
+          <span style={{color:aylikNet>=0?'#4ade80':'#f87171'}}>{fmtSign(aylikNet)}</span>
+        </div>
+        <div style={{fontSize:11,color:'#94a3b8',marginTop:6,textAlign:'right'}}>
+          {aylikNet>=0?'✅ Pozitif nakit akışı — kredi getiriyle ödeniyor':'⚠️ Özkaynak desteği gerekiyor'}
+        </div>
+      </div>
+
+      {/* KPI kartları */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+        {[
+          ['⏱️ Geri Dönüş',`${geriDonus} yıl`,aylikNet>0?'#16a34a':'#ef4444'],
+          ['📈 Özkaynak ROI','%'+ozROI+'/yıl',+ozROI>20?'#16a34a':+ozROI>10?'#2563eb':'#d97706'],
+          ['💸 Toplam Faiz Yükü',fmt(toplamFaiz),'#d97706'],
+          ['🎯 Kredi Bitti Sonrası',fmt(aylikGetiri)+'/ay','#16a34a'],
+        ].map(([l,v,col])=>(
+          <div key={l} style={{background:'#f8fafc',borderRadius:10,padding:'11px 14px'}}>
+            <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>{l}</div>
+            <div style={{fontSize:15,fontWeight:800,color:col}}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Özkaynak vs Tam Kredi karşılaştırması */}
+      <div style={{background:'#f0fdf4',border:'1px solid #86efac',borderRadius:10,padding:14}}>
+        <div style={{fontWeight:700,fontSize:12,color:'#166534',marginBottom:10}}>⚖️ Finansman Seçeneği Karşılaştırması</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,fontSize:12}}>
+          <div style={{background:'#fff',borderRadius:8,padding:10,border:'1px solid #e2e8f0'}}>
+            <div style={{fontWeight:700,color:'#2563eb',marginBottom:6}}>Karma (%{ozkaynakOran} özkaynak)</div>
+            <div style={{color:'#475569',marginBottom:3}}>Aylık net: <b style={{color:c(aylikNet)}}>{fmtSign(aylikNet)}</b></div>
+            <div style={{color:'#475569',marginBottom:3}}>Geri dönüş: <b>{geriDonus} yıl</b></div>
+            <div style={{color:'#475569'}}>Özkaynak ROI: <b>%{ozROI}</b></div>
+          </div>
+          <div style={{background:'#fff',borderRadius:8,padding:10,border:'1px solid #e2e8f0'}}>
+            <div style={{fontWeight:700,color:'#16a34a',marginBottom:6}}>Tam Özkaynak (%100)</div>
+            <div style={{color:'#475569',marginBottom:3}}>Aylık net: <b style={{color:'#16a34a'}}>{fmt(aylikGetiri)}</b></div>
+            <div style={{color:'#475569',marginBottom:3}}>Geri dönüş: <b>{(capex/(yillikGetiriTutar||1)).toFixed(1)} yıl</b></div>
+            <div style={{color:'#475569'}}>ROI: <b>%{yillikGetiriOran}</b></div>
+          </div>
+        </div>
+      </div>
+    </div>}
+
+    {/* 10 Yıl Projeksiyon */}
+    {activeTab==='projeksiyon'&&<div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:420}}>
+          <thead>
+            <tr style={{background:'#f8fafc'}}>
+              {['Yıl','Yıllık Getiri','Taksit','Yıllık Net','Kümülatif Net'].map(h=>(
+                <th key={h} style={{padding:'8px 10px',textAlign:'center',color:'#64748b',fontWeight:500,fontSize:11}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {projeksiyon.map(r=>(
+              <tr key={r.y} style={{borderTop:'1px solid #f1f5f9',background:r.kumulatif>=0?'#f0fdf4':'#fff'}}>
+                <td style={{padding:'7px 10px',textAlign:'center',fontWeight:700}}>{r.y}</td>
+                <td style={{padding:'7px 10px',textAlign:'right',color:'#16a34a',fontWeight:600}}>{fmt(r.getiri)}</td>
+                <td style={{padding:'7px 10px',textAlign:'right',color:r.taksit>0?'#ef4444':'#94a3b8'}}>{r.taksit>0?fmt(r.taksit):'—'}</td>
+                <td style={{padding:'7px 10px',textAlign:'right',fontWeight:700,color:c(r.net)}}>{fmtSign(r.net)}</td>
+                <td style={{padding:'7px 10px',textAlign:'right',fontWeight:700,color:c(r.kumulatif)}}>{fmtSign(r.kumulatif)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{marginTop:10,fontSize:11,color:'#94a3b8',textAlign:'center'}}>
+        🟢 Yeşil satır = kümülatif pozitif (yatırım kendini amorti etti)
+      </div>
+    </div>}
+
+    <div style={{marginTop:14,fontSize:10,color:'#94a3b8',textAlign:'center'}}>
+      AssetRevitalization metodolojisi uyarlaması • Tahmini değerler, yatırım tavsiyesi değildir
+    </div>
+  </div>;
+};
 
 // ── AI Screen Component ────────────────────────────────────────────────────
 const AIScreen=({parcels,selectedParcel})=>{
@@ -663,6 +938,8 @@ const ParcelForm=({parcel,onSave,onBack,Shell,toast,setToast})=>{
   const [pois,setPois]=useState(p.pois||[]);
   const [poiLoading,setPoiLoading]=useState(false);
   const [autoApplied,setAutoApplied]=useState(false);
+  const [nufusData,setNufusData]=useState(p.nufusData||null);
+  const [nufusLoading,setNufusLoading]=useState(false);
   const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
   const setM=(k,v)=>setMetrics(m=>({...m,[k]:v}));
   const score=useMemo(()=>calcISDBM(metrics),[metrics]);
@@ -677,6 +954,18 @@ const ParcelForm=({parcel,onSave,onBack,Shell,toast,setToast})=>{
         setPois(data);
         setPoiLoading(false);
       }).catch(()=>setPoiLoading(false));
+    }
+    // Fetch nüfus data
+    if(!nufusData && p.lat && p.lng){
+      const il=p.il||p.geo?.il||"";
+      const ilce=p.ilce||p.geo?.ilce||"";
+      if(il){
+        setNufusLoading(true);
+        fetchNufusData(p.lat, p.lng, il, ilce).then(data=>{
+          setNufusData(data);
+          setNufusLoading(false);
+        }).catch(()=>setNufusLoading(false));
+      }
     }
   },[]);
 
@@ -779,9 +1068,37 @@ const ParcelForm=({parcel,onSave,onBack,Shell,toast,setToast})=>{
           </div>}
         </div>
 
-        {nufus&&<div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#16a34a"}}>
-          👥 TÜİK 2023: <b>{form.il}</b> nüfusu <b>{nufus.toLocaleString("tr-TR")}</b> kişi
-        </div>}
+        {/* ── Nüfus Verisi Paneli ── */}
+        <div style={{background:"#f0fdf4",border:"1.5px solid #86efac",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#166534"}}>👥 Nüfus Verisi</div>
+            <div style={{fontSize:10,color:"#16a34a",fontWeight:500}}>
+              {nufusLoading?"⏳ Yükleniyor…":nufusData?`Kaynak: ${nufusData.kaynak}`:"Veri bekleniyor"}
+            </div>
+          </div>
+          {nufusLoading&&<div style={{fontSize:12,color:"#16a34a"}}>📡 OSM + TÜİK sorgulanıyor…</div>}
+          {!nufusLoading&&!nufusData&&<div style={{fontSize:12,color:"#94a3b8"}}>Veri bulunamadı — il/ilçe bilgisi eksik olabilir.</div>}
+          {nufusData&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+            <div style={{background:"#dcfce7",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+              <div style={{fontSize:10,color:"#166534",fontWeight:500,marginBottom:2}}>İL NÜFUSU</div>
+              <div style={{fontSize:14,fontWeight:800,color:"#15803d"}}>{nufusData.il?nufusData.il.toLocaleString("tr-TR"):"—"}</div>
+              <div style={{fontSize:10,color:"#16a34a"}}>{form.il||p.il}</div>
+            </div>
+            <div style={{background:"#dcfce7",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+              <div style={{fontSize:10,color:"#166534",fontWeight:500,marginBottom:2}}>İLÇE NÜFUSU</div>
+              <div style={{fontSize:14,fontWeight:800,color:"#15803d"}}>{nufusData.ilce?nufusData.ilce.toLocaleString("tr-TR"):"—"}</div>
+              <div style={{fontSize:10,color:"#16a34a"}}>{form.ilce||p.ilce||"—"}</div>
+            </div>
+            <div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 10px",textAlign:"center",border:"1px dashed #86efac"}}>
+              <div style={{fontSize:10,color:"#166534",fontWeight:500,marginBottom:2}}>MAHALLE NÜFUSU</div>
+              <div style={{fontSize:14,fontWeight:800,color:"#64748b"}}>{nufusData.mahalle?nufusData.mahalle.toLocaleString("tr-TR"):"OSM'de yok"}</div>
+              <div style={{fontSize:10,color:"#94a3b8"}}>{form.mahalle||p.mahalle||"—"}</div>
+            </div>
+          </div>}
+          {nufusData?.il&&<div style={{marginTop:8,fontSize:11,color:"#166534"}}>
+            💡 İlçe yoğunluğu: ~{nufusData.ilce&&nufusData.il?Math.round((nufusData.ilce/nufusData.il)*100):0}% il nüfusunun bu ilçede
+          </div>}
+        </div>
 
         <div style={{fontWeight:700,fontSize:14,marginBottom:10,borderTop:"1px solid #f1f5f9",paddingTop:14}}>📊 Metrik Puanları</div>
         {METRICS.map(m=>{
@@ -1058,12 +1375,15 @@ const App=()=>{
     />;
   }
 
+  // ── Finansman Hesap Motoru (AssetRevitalization mantığından uyarlandı) ────
+  // (component defined outside App for hook rules, rendered inside parcel_detail)
+
   // ── Parcel Detail ──────────────────────────────────────────────────────
   if(screen==="parcel_detail"&&selectedParcel){
     const p=selectedParcel;
     const alts=calcAlts(p.metrics||defaultMetrics);
     const score=p.score||calcISDBM(p.metrics||defaultMetrics);
-    const nufus=TUIK_NUFUS[p.il];
+    const nufus=TUIK_NUFUS[p.il]?.il||null;
 
     return <Shell nav="parcels">
       {toast&&<Toast msg={toast} onClose={()=>setToast("")}/>}
@@ -1096,8 +1416,12 @@ const App=()=>{
               </div>
             ))}
           </div>
-          {nufus&&<div style={{marginTop:12,background:"rgba(22,163,74,.15)",borderRadius:8,padding:"8px 10px",fontSize:11,color:"#86efac"}}>
-            👥 {p.il} nüfusu: {nufus.toLocaleString("tr-TR")}
+          {nufus&&<div style={{marginTop:12,background:"rgba(22,163,74,.15)",borderRadius:8,padding:"8px 10px"}}>
+            <div style={{fontSize:11,color:"#86efac",fontWeight:600,marginBottom:4}}>👥 Nüfus (TÜİK 2023)</div>
+            <div style={{fontSize:12,color:"#dcfce7"}}>
+              <div>İl ({p.il}): <b>{TUIK_NUFUS[p.il]?.il?.toLocaleString("tr-TR")||nufus.toLocaleString("tr-TR")}</b></div>
+              {TUIK_NUFUS[p.il]?.ilceler?.[p.ilce]&&<div>İlçe ({p.ilce}): <b>{TUIK_NUFUS[p.il].ilceler[p.ilce].toLocaleString("tr-TR")}</b></div>}
+            </div>
           </div>}
         </div>
 
@@ -1137,6 +1461,9 @@ const App=()=>{
               </div>
             ))}
           </div>
+
+          {/* Finansman Hesap Motoru */}
+          <FinansmanHesap alt={selectedAlt||alts[0]} parcel={p}/>
         </div>
       </div>
     </Shell>;
