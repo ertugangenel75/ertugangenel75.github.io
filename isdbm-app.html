@@ -497,14 +497,178 @@ function generatePDF(parcel,alts,isdbmScore){
   doc.save(`ISDBM_${(parcel.projeAdi||parcel.ada||"Rapor").replace(/\s/g,"_")}_${new Date().toISOString().slice(0,10)}.pdf`);
 }
 
+// ── Parcel Form Component (hooks must be at top level) ────────────────────
+const ParcelForm=({parcel,onSave,onBack,Shell,toast,setToast})=>{
+  const p=parcel;
+  const [form,setForm]=useState({...p});
+  const [metrics,setMetrics]=useState({...defaultMetrics,...(p.metrics||{})});
+  const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const setM=(k,v)=>setMetrics(m=>({...m,[k]:v}));
+  const score=useMemo(()=>calcISDBM(metrics),[metrics]);
+  const alts=useMemo(()=>calcAlts(metrics),[metrics]);
+  const nufus=TUIK_NUFUS[form.il]||TUIK_NUFUS[p.geo?.il];
+  const ilceler=IL_ILCE[form.il]||[];
+
+  return <Shell nav="map">
+    {toast&&<Toast msg={toast} onClose={()=>setToast("")}/>}
+    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:16,fontSize:13}}>
+      <span style={{cursor:"pointer",color:"#2563eb"}} onClick={onBack}>← Haritaya Dön</span>
+      <span style={{color:"#94a3b8"}}> › Yeni Parsel Bilgileri</span>
+    </div>
+    <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+      <div className="card" style={{flex:"1 1 320px"}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>📋 Parsel Bilgileri</div>
+        {p.geo?.display&&<div style={{background:"#eff6ff",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#2563eb"}}>
+          📍 {p.geo.display.slice(0,90)}
+        </div>}
+        <div className="fg"><label>Proje Adı</label>
+          <input value={form.projeAdi||""} onChange={e=>setF("projeAdi",e.target.value)} placeholder="Örn: Pendik Lojistik Alanı"/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+          <div className="fg"><label>İl</label>
+            <select value={form.il||""} onChange={e=>setF("il",e.target.value)}>
+              {Object.keys(IL_ILCE).map(il=><option key={il}>{il}</option>)}
+              {form.il&&!IL_ILCE[form.il]&&<option value={form.il}>{form.il}</option>}
+            </select>
+          </div>
+          <div className="fg"><label>İlçe</label>
+            <input value={form.ilce||""} onChange={e=>setF("ilce",e.target.value)}/>
+          </div>
+          <div className="fg"><label>Mahalle</label>
+            <input value={form.mahalle||""} onChange={e=>setF("mahalle",e.target.value)}/>
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+          <div className="fg"><label>Ada</label><input value={form.ada||""} onChange={e=>setF("ada",e.target.value)}/></div>
+          <div className="fg"><label>Parsel</label><input value={form.parsel||""} onChange={e=>setF("parsel",e.target.value)}/></div>
+          <div className="fg"><label>Alan (m²)</label>
+            <input type="number" value={form.alan||0} onChange={e=>setF("alan",+e.target.value)}/>
+            <span style={{fontSize:10,color:"#64748b"}}>Ölçülen: ~{Math.round(p.alan||0).toLocaleString("tr-TR")} m²</span>
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:4}}>
+          <div className="fg"><label>Plan Durumu</label>
+            <select value={form.planDurumu||"Belirsiz"} onChange={e=>setF("planDurumu",e.target.value)}>
+              {["Sanayi Bölgesi","Konut Bölgesi","Karma Kullanım","Ticaret Bölgesi","Tarım Arazisi","Orman Arazisi","Özel Proje Alanı","Belirsiz"].map(o=><option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div className="fg"><label>Mevcut Kullanım</label>
+            <select value={form.mevcutKullanim||"Boş Arsa"} onChange={e=>setF("mevcutKullanim",e.target.value)}>
+              {["Boş Arsa","Tarım Arazisi","Eski Yapı","Depo/Fabrika","Konut","Ticari Yapı"].map(o=><option key={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {p.pois&&p.pois.length>0&&<div style={{marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:6}}>📍 Yakın Çevre (1.5 km — Overpass)</div>
+          <div style={{display:"flex",flexWrap:"wrap"}}>{p.pois.map((poi,i)=><span key={i} className="poi-chip">{poi.icon} {poi.name}</span>)}</div>
+        </div>}
+
+        {nufus&&<div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#16a34a"}}>
+          👥 TÜİK 2023: <b>{form.il}</b> nüfusu <b>{nufus.toLocaleString("tr-TR")}</b> kişi
+        </div>}
+
+        <div style={{fontWeight:700,fontSize:14,marginBottom:10,borderTop:"1px solid #f1f5f9",paddingTop:14}}>📊 Metrik Puanları</div>
+        {METRICS.map(m=>{
+          const v=metrics[m.key]||60;
+          const c=v>=80?"#16a34a":v>=60?"#2563eb":"#d97706";
+          return <div key={m.key} className="slider-wrap">
+            <div className="slider-header">
+              <span style={{fontSize:13,fontWeight:500}}>{m.icon} {m.label} <span style={{fontSize:10,color:"#94a3b8"}}>(%{Math.round(m.weight*100)})</span></span>
+              <span style={{fontSize:14,fontWeight:700,color:c}}>{v} <span style={{fontSize:11}}>{v>=80?"Çok İyi":v>=60?"İyi":"Orta"}</span></span>
+            </div>
+            <input type="range" min="0" max="100" value={v} onChange={e=>setM(m.key,+e.target.value)}/>
+            <div style={{fontSize:11,color:"#94a3b8"}}>{m.desc}</div>
+          </div>;
+        })}
+
+        <button className="btn btn-primary btn-block" style={{marginTop:12}} onClick={()=>{
+          const updated={...p,...form,metrics,score:calcISDBM(metrics)};
+          onSave(updated);
+        }}>💾 Parseli Kaydet ve Analiz Et →</button>
+      </div>
+
+      <div style={{flex:"0 0 220px",display:"flex",flexDirection:"column",gap:14}}>
+        <div className="card" style={{textAlign:"center"}}>
+          <div style={{fontSize:11,color:"#64748b",marginBottom:8,fontWeight:500}}>CANLI ISDBM SKORU</div>
+          <ScoreRing score={score} size={100} color={scoreColor(score)}/>
+          <div style={{marginTop:8,fontSize:13,fontWeight:700,color:scoreColor(score)}}>{scoreLabel(score)}</div>
+          <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>Sliderlara göre güncellenir</div>
+        </div>
+        <div className="card">
+          <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>🏆 En İyi 3 Alternatif</div>
+          {alts.slice(0,3).map((alt,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f8fafc",fontSize:12}}>
+              <span>{alt.icon} {alt.name}</span>
+              <Badge score={alt.score}/>
+            </div>
+          ))}
+        </div>
+        <div className="card">
+          <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>📐 Parsel Bilgisi</div>
+          <InfoRow k="Alan" v={`${Math.round(p.alan||0).toLocaleString("tr-TR")} m²`}/>
+          <InfoRow k="Koordinat" v={`${p.lat?.toFixed(4)}, ${p.lng?.toFixed(4)}`}/>
+          <InfoRow k="Köşe sayısı" v={`${p.coords?.length||0} nokta`}/>
+        </div>
+      </div>
+    </div>
+  </Shell>;
+};
+
 // ── Main App ───────────────────────────────────────────────────────────────
 const NAV=[
-  {key:"dashboard",label:"Dashboard",icon:"🏠"},
+  {key:"dashboard",label:"Dashboard",  icon:"🏠"},
   {key:"map",      label:"Harita & Çiz",icon:"🗺️"},
-  {key:"parcels",  label:"Parseller",icon:"📐"},
-  {key:"analyze",  label:"Analiz",icon:"📊"},
-  {key:"reports",  label:"Raporlar",icon:"📄"},
+  {key:"parcels",  label:"Parseller",  icon:"📐"},
+  {key:"analyze",  label:"Analiz",     icon:"📊"},
+  {key:"reports",  label:"Raporlar",   icon:"📄"},
+  {key:"ai",       label:"ISDBM AI",   icon:"🤖"},
 ];
+
+// ── Qbiq-inspired auto-scoring from POI data ───────────────────────────────
+// Methodology: proximity bands (walking=0-500m, cycling=500-1500m, driving=1500m+)
+// weighted by amenity type importance for each metric
+function autoScoreFromPOI(pois, alan){
+  if(!pois||pois.length===0) return null;
+
+  const counts={school:0,hospital:0,pharmacy:0,bank:0,supermarket:0,bus_station:0,station:0,halt:0,motorway_junction:0,mall:0};
+  pois.forEach(p=>{counts[p.type]=(counts[p.type]||0)+1;});
+
+  // Ulaşım: transit + highway access (Qbiq traffic flow logic)
+  const transitScore=Math.min(100, ((counts.station+counts.halt)*25) + (counts.bus_station*12) + (counts.motorway_junction*18));
+  const ulasim=Math.max(30, Math.min(95, 40+transitScore));
+
+  // Demografi: population services density (Qbiq amenity proximity)
+  const demoScore=Math.min(100, (counts.school*15)+(counts.hospital*20)+(counts.pharmacy*10)+(counts.bank*8));
+  const demografi=Math.max(30, Math.min(90, 35+demoScore));
+
+  // Ticari: retail + services density
+  const ticariScore=Math.min(100, (counts.supermarket*18)+(counts.mall*25)+(counts.bank*12));
+  const ticari=Math.max(30, Math.min(90, 35+ticariScore));
+
+  // Altyapı: infer from POI richness (dense POI = good infra)
+  const totalPOI=pois.length;
+  const altyapi=Math.max(40, Math.min(90, 40+(totalPOI*4)));
+
+  // Risk: more services = lower risk (established area)
+  const risk=Math.max(40, Math.min(85, 40+(totalPOI*3)));
+
+  // Gelişme: hospital + school + mall = growing area
+  const gelismeScore=(counts.hospital*15)+(counts.school*10)+(counts.mall*20);
+  const gelisme=Math.max(35, Math.min(90, 40+gelismeScore));
+
+  // Alan bonusu: büyük arsa = daha yüksek potansiyel
+  const alanBonus=alan>50000?5:alan>20000?3:alan>10000?1:0;
+
+  return {
+    ulasim:  Math.min(95, ulasim+alanBonus),
+    demografi:Math.min(90, demografi),
+    ticari:  Math.min(90, ticari+alanBonus),
+    altyapi: Math.min(90, altyapi),
+    risk:    Math.min(85, risk),
+    gelisme: Math.min(90, gelisme+alanBonus),
+  };
+}
 
 const defaultMetrics={ulasim:60,demografi:60,ticari:60,altyapi:60,risk:60,gelisme:60};
 
@@ -662,117 +826,21 @@ const App=()=>{
     <MapFull parcels={parcels} onParcelSaved={handleParcelSaved} drawMode={drawMode} setDrawMode={setDrawMode} flyTo={flyTo}/>
   </Shell>;
 
-  // ── Parcel Form (after drawing) ────────────────────────────────────────
+  // ── Parcel Form (proper component — no hooks-in-conditional) ───────────
   if(screen==="parcel_form"&&selectedParcel){
-    const p=selectedParcel;
-    const [form,setForm]=useState({...p});
-    const [metrics,setMetrics]=useState({...defaultMetrics,...(p.metrics||{})});
-    const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
-    const setM=(k,v)=>setMetrics(m=>({...m,[k]:v}));
-    const score=calcISDBM(metrics);
-    const alts=calcAlts(metrics);
-    const nufus=TUIK_NUFUS[form.il||p.geo?.il];
-
-    return <Shell nav="map">
-      {toast&&<Toast msg={toast} onClose={()=>setToast("")}/>}
-      <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:16,fontSize:13,color:"#94a3b8"}}>
-        <span style={{cursor:"pointer",color:"#2563eb"}} onClick={()=>goNav("map")}>← Haritaya Dön</span>
-        <span> › Yeni Parsel</span>
-      </div>
-      <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-        {/* Form */}
-        <div className="card" style={{flex:"1 1 320px"}}>
-          <div style={{fontWeight:700,fontSize:15,marginBottom:16}}>📋 Parsel Bilgileri</div>
-          {/* Auto-filled geo info */}
-          {p.geo?.display&&<div style={{background:"#eff6ff",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:12,color:"#2563eb"}}>
-            📍 Otomatik konum: {p.geo.display.slice(0,80)}…
-          </div>}
-          <div className="fg"><label>Proje Adı</label><input defaultValue={form.projeAdi} onChange={e=>setF("projeAdi",e.target.value)} placeholder="Örn: Pendik Lojistik Alanı"/></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-            <div className="fg"><label>İl</label>
-              <select defaultValue={form.il||p.geo?.il} onChange={e=>setF("il",e.target.value)}>
-                {Object.keys(IL_ILCE).map(il=><option key={il}>{il}</option>)}
-                {form.il&&!IL_ILCE[form.il]&&<option value={form.il}>{form.il}</option>}
-              </select>
-            </div>
-            <div className="fg"><label>İlçe</label><input defaultValue={form.ilce||p.geo?.ilce} onChange={e=>setF("ilce",e.target.value)}/></div>
-            <div className="fg"><label>Mahalle</label><input defaultValue={form.mahalle||p.geo?.mahalle} onChange={e=>setF("mahalle",e.target.value)}/></div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-            <div className="fg"><label>Ada</label><input defaultValue={form.ada} onChange={e=>setF("ada",e.target.value)}/></div>
-            <div className="fg"><label>Parsel</label><input defaultValue={form.parsel} onChange={e=>setF("parsel",e.target.value)}/></div>
-            <div className="fg"><label>Alan (m²)</label>
-              <input type="number" defaultValue={Math.round(p.alan||0)} onChange={e=>setF("alan",+e.target.value)}/>
-              <span style={{fontSize:10,color:"#64748b"}}>Otomatik: {Math.round(p.alan||0).toLocaleString("tr-TR")} m²</span>
-            </div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div className="fg"><label>Plan Durumu</label>
-              <select defaultValue={form.planDurumu} onChange={e=>setF("planDurumu",e.target.value)}>
-                {["Sanayi Bölgesi","Konut Bölgesi","Karma Kullanım","Ticaret Bölgesi","Tarım Arazisi","Orman Arazisi","Özel Proje Alanı","Belirsiz"].map(o=><option key={o}>{o}</option>)}
-              </select>
-            </div>
-            <div className="fg"><label>Mevcut Kullanım</label>
-              <select defaultValue={form.mevcutKullanim} onChange={e=>setF("mevcutKullanim",e.target.value)}>
-                {["Boş Arsa","Tarım Arazisi","Eski Yapı","Depo/Fabrika","Konut","Ticari Yapı"].map(o=><option key={o}>{o}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* POI from Overpass */}
-          {p.pois&&p.pois.length>0&&<div style={{marginTop:8,marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:600,color:"#374151",marginBottom:6}}>📍 Yakın Çevre (1.5 km — Overpass API)</div>
-            <div style={{display:"flex",flexWrap:"wrap"}}>
-              {p.pois.map((poi,i)=><span key={i} className="poi-chip">{poi.icon} {poi.name}</span>)}
-            </div>
-          </div>}
-
-          {/* TÜİK */}
-          {nufus&&<div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:12,color:"#16a34a"}}>
-            👥 TÜİK 2023: {form.il} nüfusu <b>{nufus.toLocaleString("tr-TR")}</b> kişi
-          </div>}
-
-          <div style={{fontWeight:700,fontSize:14,marginBottom:12,marginTop:4}}>📊 Metrik Puanları</div>
-          {METRICS.map(m=>{
-            const v=metrics[m.key]||60;
-            const c=v>=80?"#16a34a":v>=60?"#2563eb":"#d97706";
-            return <div key={m.key} className="slider-wrap">
-              <div className="slider-header">
-                <span style={{fontSize:13,fontWeight:500}}>{m.icon} {m.label} <span style={{fontSize:10,color:"#94a3b8"}}>(%{Math.round(m.weight*100)})</span></span>
-                <span style={{fontSize:15,fontWeight:700,color:c}}>{v} <span style={{fontSize:11}}>{v>=80?"Çok İyi":v>=60?"İyi":"Orta"}</span></span>
-              </div>
-              <input type="range" min="0" max="100" value={v} onChange={e=>setM(m.key,+e.target.value)}/>
-              <div style={{fontSize:11,color:"#94a3b8"}}>{m.desc}</div>
-            </div>;
-          })}
-
-          <button className="btn btn-primary btn-block" style={{marginTop:8}} onClick={()=>{
-            const updated={...p,...form,metrics,score:calcISDBM(metrics)};
-            setSelectedParcel(updated);
-            saveParcel(updated);
-            setScreen("parcel_detail");
-          }}>💾 Parseli Kaydet ve Analiz Et →</button>
-        </div>
-
-        {/* Live score */}
-        <div style={{flex:"0 0 220px",display:"flex",flexDirection:"column",gap:14}}>
-          <div className="card" style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"#64748b",marginBottom:8,fontWeight:500}}>CANLI ISDBM SKORU</div>
-            <ScoreRing score={score} size={100} color={scoreColor(score)}/>
-            <div style={{marginTop:8,fontSize:13,fontWeight:700,color:scoreColor(score)}}>{scoreLabel(score)}</div>
-          </div>
-          <div className="card">
-            <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>🏆 En İyi 3 Alternatif</div>
-            {alts.slice(0,3).map((alt,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f8fafc",fontSize:12}}>
-                <span>{alt.icon} {alt.name}</span>
-                <Badge score={alt.score}/>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </Shell>;
+    return <ParcelForm
+      parcel={selectedParcel}
+      toast={toast}
+      setToast={setToast}
+      Shell={Shell}
+      onBack={()=>goNav("map")}
+      onSave={updated=>{
+        setSelectedParcel(updated);
+        saveParcel(updated);
+        setScreen("parcel_detail");
+        setActiveNav("parcels");
+      }}
+    />;
   }
 
   // ── Parcel Detail ──────────────────────────────────────────────────────
