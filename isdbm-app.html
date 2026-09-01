@@ -660,12 +660,39 @@ const ParcelForm=({parcel,onSave,onBack,Shell,toast,setToast})=>{
   const p=parcel;
   const [form,setForm]=useState({...p});
   const [metrics,setMetrics]=useState({...defaultMetrics,...(p.metrics||{})});
+  const [pois,setPois]=useState(p.pois||[]);
+  const [poiLoading,setPoiLoading]=useState(false);
+  const [autoApplied,setAutoApplied]=useState(false);
   const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
   const setM=(k,v)=>setMetrics(m=>({...m,[k]:v}));
   const score=useMemo(()=>calcISDBM(metrics),[metrics]);
   const alts=useMemo(()=>calcAlts(metrics),[metrics]);
   const nufus=TUIK_NUFUS[form.il]||TUIK_NUFUS[p.geo?.il];
-  const ilceler=IL_ILCE[form.il]||[];
+
+  // Auto-fetch POI if not already loaded
+  useEffect(()=>{
+    if(pois.length===0 && p.lat && p.lng){
+      setPoiLoading(true);
+      fetchPOI(p.lat, p.lng).then(data=>{
+        setPois(data);
+        setPoiLoading(false);
+      }).catch(()=>setPoiLoading(false));
+    }
+  },[]);
+
+  const handleAutoScore=()=>{
+    const auto=autoScoreFromPOI(pois, form.alan||p.alan);
+    if(auto){ setMetrics(auto); setAutoApplied(true); }
+  };
+
+  const refreshPOI=()=>{
+    if(!p.lat||!p.lng) return;
+    setPoiLoading(true);
+    fetchPOI(p.lat, p.lng).then(data=>{
+      setPois(data);
+      setPoiLoading(false);
+    }).catch(()=>setPoiLoading(false));
+  };
 
   return <Shell nav="map">
     {toast&&<Toast msg={toast} onClose={()=>setToast("")}/>}
@@ -717,21 +744,40 @@ const ParcelForm=({parcel,onSave,onBack,Shell,toast,setToast})=>{
           </div>
         </div>
 
-        {p.pois&&p.pois.length>0&&<div style={{marginBottom:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-            <div style={{fontSize:12,fontWeight:600,color:"#374151"}}>📍 Yakın Çevre (1.5 km — Overpass)</div>
-            <button className="btn btn-secondary" style={{fontSize:11,padding:"4px 10px"}} onClick={()=>{
-              const auto=autoScoreFromPOI(p.pois, form.alan||p.alan);
-              if(auto){
-                setMetrics(auto);
-              }
-            }}>
-              ⚡ Qbiq Metodolojisiyle Otomatik Hesapla
-            </button>
+        {/* ── Qbiq Otomatik Hesaplama Paneli — her zaman görünür ── */}
+        <div style={{background:"#f0f9ff",border:"1.5px solid #bae6fd",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:"#0369a1"}}>⚡ Qbiq Metodolojisiyle Otomatik Hesapla</div>
+              <div style={{fontSize:11,color:"#0284c7",marginTop:2}}>Overpass API POI verisiyle 6 metrik otomatik dolar</div>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button className="btn btn-secondary" style={{fontSize:11,padding:"5px 10px"}} onClick={refreshPOI} disabled={poiLoading}>
+                {poiLoading?"⏳ Yükleniyor…":"🔄 POI Yenile"}
+              </button>
+              <button className="btn btn-primary" style={{fontSize:12,padding:"6px 14px",opacity:poiLoading?0.5:1}}
+                onClick={handleAutoScore} disabled={poiLoading}>
+                {autoApplied?"✅ Uygulandı":"⚡ Uygula"}
+              </button>
+            </div>
           </div>
-          <div style={{display:"flex",flexWrap:"wrap"}}>{p.pois.map((poi,i)=><span key={i} className="poi-chip">{poi.icon} {poi.name}</span>)}</div>
-          <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>POI verisi Overpass API • Metodoloji: Qbiq proximity band sistemi</div>
-        </div>}
+
+          {/* POI listesi */}
+          {poiLoading&&<div style={{fontSize:12,color:"#0284c7",padding:"8px 0"}}>📡 Yakın çevre taranıyor (Overpass API)…</div>}
+          {!poiLoading&&pois.length===0&&<div style={{fontSize:12,color:"#94a3b8",padding:"6px 0"}}>
+            POI verisi bulunamadı. "🔄 POI Yenile" ile tekrar deneyin.
+            {(!p.lat||!p.lng)&&" (Koordinat yok — haritadan parsel çizin)"}
+          </div>}
+          {pois.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:6}}>
+            {pois.map((poi,i)=><span key={i} className="poi-chip">{poi.icon} {poi.name}</span>)}
+          </div>}
+          {pois.length>0&&<div style={{fontSize:11,color:"#64748b"}}>
+            {pois.length} tesis bulundu (1.5 km) · Kaynak: OpenStreetMap Overpass · Metodoloji: Qbiq proximity band
+          </div>}
+          {autoApplied&&<div style={{marginTop:8,fontSize:12,color:"#16a34a",fontWeight:500}}>
+            ✅ Metrikler POI verisiyle güncellendi. Sliderları manuel ayarlayabilirsiniz.
+          </div>}
+        </div>
 
         {nufus&&<div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#16a34a"}}>
           👥 TÜİK 2023: <b>{form.il}</b> nüfusu <b>{nufus.toLocaleString("tr-TR")}</b> kişi
