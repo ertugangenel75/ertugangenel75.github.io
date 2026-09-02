@@ -303,27 +303,85 @@ const Badge=({score})=>{
 };
 const InfoRow=({k,v})=><div className="info-row"><span className="k">{k}</span><span className="v">{v}</span></div>;
 
-// ── Overpass POI fetch ─────────────────────────────────────────────────────
+// ── Overpass POI fetch — genişletilmiş ────────────────────────────────────
+const POI_IKONLAR={
+  // Ulaşım
+  "station":"🚇","halt":"🚇","tram_stop":"🚊","bus_station":"🚌","ferry_terminal":"⛴️","motorway_junction":"🛣️",
+  // Sağlık
+  "hospital":"🏥","clinic":"🏥","pharmacy":"💊","doctors":"🩺",
+  // Eğitim
+  "school":"🏫","university":"🎓","college":"🎓","kindergarten":"🧸",
+  // Ticaret
+  "mall":"🏬","supermarket":"🛒","marketplace":"🏪",
+  // Konaklama
+  "hotel":"🏨","motel":"🏨","hostel":"🏨",
+  // Resmi & Kamu
+  "townhall":"🏛️","courthouse":"⚖️","police":"👮","fire_station":"🚒","post_office":"📮","embassy":"🏛️",
+  // Finans
+  "bank":"🏦","atm":"💳",
+  // Dini
+  "place_of_worship":"🕌",
+  // Yeme-İçme & Sosyal
+  "restaurant":"🍽️","cafe":"☕","park":"🌳","stadium":"🏟️","cinema":"🎬","theatre":"🎭",
+  // Endüstri & Lojistik
+  "fuel":"⛽","parking":"🅿️","industrial":"🏭",
+};
+
+const POI_KATEGORI={
+  "station":"Ulaşım","halt":"Ulaşım","tram_stop":"Ulaşım","bus_station":"Ulaşım","ferry_terminal":"Ulaşım","motorway_junction":"Ulaşım",
+  "hospital":"Sağlık","clinic":"Sağlık","pharmacy":"Sağlık","doctors":"Sağlık",
+  "school":"Eğitim","university":"Eğitim","college":"Eğitim","kindergarten":"Eğitim",
+  "mall":"Ticaret","supermarket":"Ticaret","marketplace":"Ticaret",
+  "hotel":"Konaklama","motel":"Konaklama","hostel":"Konaklama",
+  "townhall":"Resmi Kurum","courthouse":"Resmi Kurum","police":"Resmi Kurum","fire_station":"Resmi Kurum","post_office":"Resmi Kurum","embassy":"Resmi Kurum",
+  "bank":"Finans","atm":"Finans",
+  "place_of_worship":"Dini",
+  "restaurant":"Sosyal","cafe":"Sosyal","park":"Yeşil Alan","stadium":"Sosyal","cinema":"Sosyal","theatre":"Sosyal",
+  "fuel":"Diğer","parking":"Diğer","industrial":"Diğer",
+};
+
 async function fetchPOI(lat,lng,radius=1500){
-  const query=`[out:json][timeout:15];
+  const query=`[out:json][timeout:20];
 (
-  node["amenity"~"school|hospital|pharmacy|bank|supermarket|bus_station"](around:${radius},${lat},${lng});
-  node["shop"~"supermarket|mall"](around:${radius},${lat},${lng});
-  node["railway"~"station|halt"](around:${radius},${lat},${lng});
+  node["amenity"~"school|hospital|clinic|pharmacy|doctors|bank|atm|supermarket|bus_station|ferry_terminal|townhall|courthouse|police|fire_station|post_office|embassy|restaurant|cafe|cinema|theatre|stadium|fuel|parking|place_of_worship"](around:${radius},${lat},${lng});
+  node["shop"~"supermarket|mall|department_store"](around:${radius},${lat},${lng});
+  node["tourism"~"hotel|motel|hostel"](around:${radius},${lat},${lng});
+  node["leisure"~"park|stadium|sports_centre"](around:${radius},${lat},${lng});
+  node["railway"~"station|halt|tram_stop"](around:${radius},${lat},${lng});
   node["highway"="motorway_junction"](around:${radius},${lat},${lng});
+  node["amenity"="ferry_terminal"](around:${radius},${lat},${lng});
 );
 out body;`;
   try{
     const r=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
     const d=await r.json();
-    const icons={"school":"🏫","hospital":"🏥","pharmacy":"💊","bank":"🏦","supermarket":"🛒","bus_station":"🚌","station":"🚉","halt":"🚉","motorway_junction":"🛣️","mall":"🏬"};
-    return d.elements.slice(0,12).map(e=>({
-      name:e.tags?.name||e.tags?.amenity||e.tags?.shop||e.tags?.railway||"Tesis",
-      type:e.tags?.amenity||e.tags?.shop||e.tags?.railway||"other",
-      icon:icons[e.tags?.amenity||e.tags?.shop||e.tags?.railway]||"📍",
-      lat:e.lat,lng:e.lon,
-    }));
-  }catch{return[];}
+    const seen=new Set();
+    const results=[];
+    for(const e of d.elements){
+      const t=e.tags||{};
+      const rawType=t.amenity||t.shop||t.tourism||t.leisure||t.railway||t.highway||"other";
+      const name=t.name||t.amenity||t.shop||t.tourism||t.railway||"Tesis";
+      const key=name+rawType;
+      if(seen.has(key)) continue;
+      seen.add(key);
+      const eLat=e.lat;
+      const eLng=e.lon;
+      if(!eLat||!eLng) continue;
+      const dist=Math.round(Math.sqrt(
+        Math.pow((eLat-lat)*111000,2)+
+        Math.pow((eLng-lng)*111000*Math.cos(lat*Math.PI/180),2)
+      ));
+      results.push({
+        name,
+        type:rawType,
+        kategori:POI_KATEGORI[rawType]||"Diğer",
+        icon:POI_IKONLAR[rawType]||"📍",
+        lat:eLat,lng:eLng,dist,
+      });
+    }
+    // Kategori ve mesafeye göre sırala, max 30
+    return results.sort((a,b)=>a.dist-b.dist).slice(0,30);
+  }catch(e){console.error("POI fetch error",e);return[];}
 }
 
 // ── Nominatim reverse geocode ─────────────────────────────────────────────
@@ -544,83 +602,221 @@ const MapFull=({parcels,onParcelSaved,onDrawnCoords,drawMode,setDrawMode,flyTo})
   </div>;
 };
 
-// ── PDF Generator ──────────────────────────────────────────────────────────
+// ── PDF Generator — Profesyonel ───────────────────────────────────────────
 function generatePDF(parcel,alts,isdbmScore){
   const{jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
-  const W=210,mg=18;let y=mg;
-  const txt=(t,x,sz=10,bold=false,col=[30,30,30])=>{doc.setFontSize(sz);doc.setFont("helvetica",bold?"bold":"normal");doc.setTextColor(...col);doc.text(t,x,y);y+=sz*.4+3;};
-  const hl=(col=[226,232,240])=>{doc.setDrawColor(...col);doc.line(mg,y,W-mg,y);y+=4;};
+  const W=210, H=297, mg=16, cW=W-2*mg;
+  let y=0;
 
-  doc.setFillColor(15,23,42);doc.rect(0,0,W,28,"F");
-  doc.setFontSize(18);doc.setFont("helvetica","bold");doc.setTextColor(255,255,255);doc.text("ISDBM Digital",mg,12);
-  doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(148,163,184);doc.text("ARGEPLANO | Investment Intelligence Platform",mg,19);
-  doc.setFontSize(10);doc.setTextColor(96,165,250);doc.text("YATIRIM ANALİZ RAPORU",W-mg,12,{align:"right"});
-  doc.setFontSize(8);doc.setTextColor(148,163,184);doc.text(new Date().toLocaleDateString("tr-TR"),W-mg,19,{align:"right"});
-  y=36;
+  // ── Renk paleti ──
+  const C={
+    dark:[15,23,42], mid:[30,41,59], muted:[71,85,105], light:[148,163,184],
+    white:[255,255,255], bg:[248,250,252], border:[226,232,240],
+    green:[22,163,74], blue:[37,99,235], amber:[217,119,6], red:[239,68,68],
+    accent:[37,99,235],
+  };
+  const scoreColor=(s)=>s>=85?C.green:s>=75?C.blue:s>=60?C.amber:C.red;
+  const scoreLabel=(s)=>s>=85?"Mükemmel Fırsat":s>=75?"Güçlü Fırsat":s>=60?"Orta Potansiyel":"Düşük Potansiyel";
 
+  // ── Yardımcı fonksiyonlar ──
+  const setC=(col)=>doc.setTextColor(...col);
+  const setF=(col)=>doc.setFillColor(...col);
+  const setD=(col)=>doc.setDrawColor(...col);
+  const font=(sz,bold=false,col=C.dark)=>{
+    doc.setFontSize(sz);
+    doc.setFont("helvetica",bold?"bold":"normal");
+    setC(col);
+  };
+  const text=(t,x,_y,opts={})=>doc.text(t,x,_y,opts);
+  const newLine=(h=6)=>{y+=h;};
+  const checkPage=(need=20)=>{
+    if(y+need>H-20){
+      doc.addPage();
+      y=16;
+      // Mini header on new pages
+      setF(C.dark); doc.rect(0,0,W,8,"F");
+      font(7,false,C.light); text("ISDBM Digital — EGBIM Yatırım Analiz Raporu",mg,6);
+      font(7,false,C.light); text(`${parcel.projeAdi||parcel.ada||"İsimsiz Parsel"}`,W-mg,6,{align:"right"});
+      y=14;
+    }
+  };
+  const hLine=(col=C.border)=>{setD(col);doc.line(mg,y,W-mg,y);newLine(4);};
+  const sectionHeader=(title,icon="")=>{
+    checkPage(16);
+    setF(C.bg); doc.rect(mg,y-4,cW,10,"F");
+    font(9,true,C.dark); text((icon?" "+icon+" "+title:title),mg+3,y+2);
+    newLine(10);
+  };
+  const miniCard=(x,_y,w,h,fillCol,label,value,valCol=C.dark,labelCol=C.muted)=>{
+    setF(fillCol); doc.roundedRect(x,_y,w,h,2,2,"F");
+    setD(C.border); doc.roundedRect(x,_y,w,h,2,2,"S");
+    font(7,false,labelCol); text(label,x+w/2,_y+5,{align:"center"});
+    font(11,true,valCol); text(String(value),x+w/2,_y+11,{align:"center"});
+  };
+
+  // ══════════════════════════════════════════════════════
+  // SAYFA 1
+  // ══════════════════════════════════════════════════════
+
+  // ── Kapak header ──
+  setF(C.dark); doc.rect(0,0,W,42,"F");
+  // Sol logo alanı
+  setF([37,99,235]); doc.roundedRect(mg,6,28,28,3,3,"F");
+  font(14,true,C.white); text("ISDBM",mg+14,16,{align:"center"});
+  font(7,false,[148,163,184]); text("Digital",mg+14,22,{align:"center"});
+  // Başlık
+  font(16,true,C.white); text("YATIRIM ANALİZ RAPORU",mg+34,14);
+  font(8,false,[148,163,184]); text("Investment Site Development Business Model",mg+34,21);
+  font(7,false,[148,163,184]); text("EGBIM | Geliştirici: Ertuğan Genel",mg+34,28);
+  // Tarih/sağ
+  font(8,false,[96,165,250]); text(new Date().toLocaleDateString("tr-TR",{day:"2-digit",month:"long",year:"numeric"}),W-mg,14,{align:"right"});
+  font(7,false,[148,163,184]); text("Tüm Hakları Saklıdır",W-mg,21,{align:"right"});
+  y=50;
+
+  // ── Parsel başlık bandı ──
   const sc=isdbmScore;
-  const[r2,g2,b2]=sc>=85?[22,163,74]:sc>=75?[37,99,235]:sc>=60?[217,119,6]:[239,68,68];
-  doc.setFontSize(16);doc.setFont("helvetica","bold");doc.setTextColor(15,23,42);
-  doc.text(`${parcel.projeAdi||parcel.ada||"İsimsiz"} — ${parcel.il} / ${parcel.ilce}`,mg,y);y+=10;
+  const sCol=scoreColor(sc);
+  setF(C.bg); doc.rect(mg,y,cW,24,"F");
+  setD(C.border); doc.rect(mg,y,cW,24,"S");
+  // Skor dairesi
+  setF(sCol); doc.circle(mg+14,y+12,10,"F");
+  font(14,true,C.white); text(String(sc),mg+14,y+13.5,{align:"center"});
+  // Parsel adı
+  font(13,true,C.dark); text(parcel.projeAdi||parcel.ada||"İsimsiz Parsel",mg+28,y+9);
+  font(9,false,C.muted); text(`${parcel.il||"—"} / ${parcel.ilce||"—"} — ${parcel.mahalle||"—"}`,mg+28,y+17);
+  // Skor etiketi
+  font(9,true,sCol); text(scoreLabel(sc),W-mg,y+9,{align:"right"});
+  font(8,false,C.muted); text("ISDBM Bütünleşik Skor",W-mg,y+17,{align:"right"});
+  y+=30;
 
-  doc.setFillColor(r2,g2,b2);doc.roundedRect(mg,y,50,22,3,3,"F");
-  doc.setFontSize(22);doc.setFont("helvetica","bold");doc.setTextColor(255,255,255);doc.text(String(sc),mg+25,y+12,{align:"center"});
-  doc.setFontSize(7);doc.text("ISDBM SKORU",mg+25,y+18,{align:"center"});
-  doc.setFontSize(10);doc.setFont("helvetica","bold");doc.setTextColor(r2,g2,b2);doc.text(scoreLabel(sc),mg+56,y+8);
-  doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(100,116,139);doc.text("Ağırlıklı bütünleşik yatırım potansiyel skoru",mg+56,y+15);
-  y+=30;hl();
+  // ── 4 mini kart ──
+  const cards=[
+    [parcel.alan?Number(parcel.alan).toLocaleString("tr-TR")+" m²":"—","Parsel Alanı"],
+    [parcel.planDurumu||"—","İmar Durumu"],
+    [parcel.mevcutKullanim||"—","Mevcut Kullanım"],
+    [(parcel.ada&&parcel.parsel)?`${parcel.ada}/${parcel.parsel}`:"—","Ada/Parsel"],
+  ];
+  const cw4=(cW-9)/4;
+  cards.forEach(([v,l],i)=>{
+    miniCard(mg+i*(cw4+3),y,cw4,16,C.white,l,v.length>12?v.slice(0,11)+"…":v,C.dark,C.muted);
+  });
+  y+=22; hLine();
 
-  txt("PARSEL BİLGİLERİ",mg,11,true,[15,23,42]);
-  [[`${parcel.il} / ${parcel.ilce}`,`Mahalle: ${parcel.mahalle||"—"}`],[`Ada: ${parcel.ada||"—"} / Parsel: ${parcel.parsel||"—"}`,`Alan: ${Number(parcel.alan||0).toLocaleString("tr-TR")} m²`],[`Plan Durumu: ${parcel.planDurumu||"—"}`,`Mevcut Kullanım: ${parcel.mevcutKullanim||"—"}`]].forEach(([a,b])=>{
-    doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(15,23,42);doc.text(a,mg,y);doc.text(b,W/2,y);y+=7;
-  });y+=2;hl();
-
-  txt("ANALİZ METRİKLERİ",mg,11,true,[15,23,42]);
-  METRICS.forEach(m=>{
+  // ── Metrik çubukları ──
+  sectionHeader("ANALİZ METRİKLERİ","📊");
+  METRICS.forEach((m,i)=>{
+    checkPage(12);
     const sv=parcel.metrics?.[m.key]||50;
-    const[r,g,b]=sv>=85?[22,163,74]:sv>=75?[37,99,235]:sv>=60?[217,119,6]:[239,68,68];
-    doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(15,23,42);doc.text(m.label,mg,y);
-    doc.setFillColor(226,232,240);doc.rect(mg+52,y-4,80,5,"F");
-    doc.setFillColor(r,g,b);doc.rect(mg+52,y-4,80*(sv/100),5,"F");
-    doc.setFontSize(9);doc.setFont("helvetica","bold");doc.setTextColor(r,g,b);doc.text(`${sv}`,mg+136,y,{align:"right"});
-    y+=8;
-  });y+=2;hl();
+    const col=scoreColor(sv);
+    // Satır bg
+    if(i%2===0){setF([250,251,252]); doc.rect(mg,y-4,cW,9,"F");}
+    font(8,false,C.dark); text(m.label,mg+2,y+1);
+    // Bar arka plan
+    setF(C.border); doc.rect(mg+55,y-2,90,5,"F");
+    // Bar dolu
+    setF(col); doc.rect(mg+55,y-2,90*(sv/100),5,"F");
+    // Değer
+    font(9,true,col); text(String(sv),mg+150,y+1);
+    font(7,false,C.muted); text(`%${Math.round(m.weight*100)} ağırlık`,W-mg,y+1,{align:"right"});
+    newLine(9);
+  });
+  hLine();
 
-  txt("YATIRIM ALTERNATİFLERİ",mg,11,true,[15,23,42]);
+  // ── Yatırım alternatifleri ──
+  sectionHeader("YATIRIM ALTERNATİFLERİ","🏗️");
   alts.slice(0,4).forEach((alt,i)=>{
-    const[r,g,b]=alt.score>=85?[22,163,74]:alt.score>=75?[37,99,235]:alt.score>=60?[217,119,6]:[239,68,68];
-    if(i%2===0)doc.setFillColor(248,250,252);else doc.setFillColor(255,255,255);
-    doc.rect(mg,y-5,W-2*mg,18,"F");
-    doc.setFontSize(10);doc.setFont("helvetica","bold");doc.setTextColor(15,23,42);doc.text(`${i+1}. ${alt.name}`,mg+3,y+2);
-    doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(100,116,139);doc.text(`CAPEX: ${alt.capex}  ROI: ${alt.roi}  IRR: ${alt.irr}  Süre: ${alt.sure}`,mg+3,y+8);
-    doc.setFontSize(11);doc.setFont("helvetica","bold");doc.setTextColor(r,g,b);doc.text(`${alt.score}`,W-mg-3,y+2,{align:"right"});
-    y+=20;
-  });hl();
+    checkPage(28);
+    const col=scoreColor(alt.score);
+    // Kart arka plan
+    setF(i===0?[239,246,255]:C.bg);
+    doc.roundedRect(mg,y,cW,22,2,2,"F");
+    setD(i===0?C.accent:C.border);
+    doc.roundedRect(mg,y,cW,22,2,2,"S");
+    // Sıra numarası
+    setF(col); doc.circle(mg+7,y+11,5,"F");
+    font(9,true,C.white); text(String(i+1),mg+7,y+11.5,{align:"center"});
+    // İsim ve detay
+    font(10,true,C.dark); text(alt.name,mg+16,y+8);
+    font(7,false,C.muted);
+    const capexStr=alt.capexFmt?alt.capexFmt.combined:alt.capex;
+    text(`CAPEX: ${capexStr}   ROI: ${alt.roi}   IRR: ${alt.irr}   Süre: ${alt.sure}`,mg+16,y+14);
+    font(7,false,C.muted); text(`İnşaat Sınıfı: ${alt.sinif||"—"}   Emsal: ${alt.emsalDef||"—"}`,mg+16,y+19);
+    // Skor
+    font(14,true,col); text(String(alt.score),W-mg-4,y+12,{align:"right"});
+    font(7,false,col); text(alt.uyg,W-mg-4,y+19,{align:"right"});
+    y+=26;
+  });
+  hLine();
 
-  if(parcel.pois&&parcel.pois.length>0){
-    txt("YAKIND ÇEVRE (1.5 km)",mg,11,true,[15,23,42]);
-    const poiText=parcel.pois.map(p=>`${p.icon} ${p.name}`).join("   ");
-    doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(100,116,139);
-    const lines=doc.splitTextToSize(poiText,W-2*mg);
-    doc.text(lines,mg,y);y+=lines.length*5+4;hl();
+  // ── CAPEX özet (seçili alternatif varsa) ──
+  const topAlt=alts[0];
+  if(topAlt?.capexTL){
+    checkPage(28);
+    sectionHeader("EN YÜKSEK PUANLI YATIRIM — MALİYET TAHMİNİ","💰");
+    const cx=topAlt.capexDetail;
+    const cw3=(cW-6)/3;
+    [
+      [topAlt.capexFmt?.tlStr||"—","CAPEX (₺)",C.dark],
+      [topAlt.capexFmt?.usdStr||"—","CAPEX ($)",C.blue],
+      [cx?(Math.round(cx.insAlan).toLocaleString("tr-TR")+" m²"):"—","İnşaat Alanı",C.muted],
+    ].forEach(([v,l,col],i)=>{
+      miniCard(mg+i*(cw3+3),y,cw3,18,C.white,l,v,col,C.muted);
+    });
+    y+=22;
+    font(7,false,C.muted);
+    if(cx) text(`Alan ${cx.alan.toLocaleString("tr-TR")} m² × Emsal ${cx.emsal} × Birim ${cx.birim.toLocaleString("tr-TR")} ₺/m² × Lokasyon ${cx.lokKat}x × Sınıf ${cx.insKat}x`,mg,y);
+    newLine(8); hLine();
   }
 
+  // ── TÜİK Nüfus ──
   if(parcel.il&&TUIK_NUFUS[parcel.il]){
-    txt("NÜFUS VERİSİ (TÜİK ADNKS 2023)",mg,11,true,[15,23,42]);
+    checkPage(20);
+    sectionHeader("NÜFUS VERİSİ","👥");
     const ilN=TUIK_NUFUS[parcel.il]?.il;
-    const ilceN=TUIK_NUFUS[parcel.il]?.ilceler?.[parcel.ilce];
-    doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(15,23,42);
-    if(ilN) { doc.text(`${parcel.il} İl Nüfusu: ${ilN.toLocaleString("tr-TR")} kişi`,mg,y);y+=7; }
-    if(ilceN) { doc.text(`${parcel.ilce} İlçe Nüfusu: ${ilceN.toLocaleString("tr-TR")} kişi`,mg,y);y+=7; }
-    if(ilN&&ilceN) { doc.text(`İlçe yoğunluğu: %${Math.round(ilceN/ilN*100)} (il nüfusunun)`,mg,y);y+=7; }
-    y+=2;hl();
+    const normIl=s=>(s||"").toLowerCase().trim().replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ı/g,"i").replace(/ö/g,"o").replace(/ç/g,"c");
+    const ilData=TUIK_NUFUS[parcel.il];
+    const ilceKey=ilData?Object.keys(ilData.ilceler||{}).find(k=>normIl(k)===normIl(parcel.ilce)||normIl(k).includes(normIl(parcel.ilce))||normIl(parcel.ilce).includes(normIl(k))):null;
+    const ilceN=ilceKey?ilData.ilceler[ilceKey]:null;
+    const cw2=(cW-3)/2;
+    [
+      [ilN?ilN.toLocaleString("tr-TR")+" kişi":"—",parcel.il+" İl Nüfusu"],
+      [ilceN?ilceN.toLocaleString("tr-TR")+" kişi":"—",(ilceKey||parcel.ilce)+" İlçe Nüfusu"],
+    ].forEach(([v,l],i)=>{ miniCard(mg+i*(cw2+3),y,cw2,16,C.white,l,v,C.dark,C.muted); });
+    y+=20; hLine();
   }
 
-  doc.setFontSize(7);doc.setTextColor(148,163,184);
-  doc.text("Bu rapor ISDBM Digital metodolojisi ile otomatik oluşturulmuştur. Nihai yatırım kararları için uzman görüşü alınız.",mg,y);y+=4;
-  doc.text(`ARGEPLANO | ISDBM Digital | ${new Date().toLocaleString("tr-TR")}`,mg,y);
-  doc.text("Sayfa 1/1",W-mg,y,{align:"right"});
+  // ── POI — Yakın çevre ──
+  if(parcel.pois&&parcel.pois.length>0){
+    checkPage(24);
+    sectionHeader("YAKIN ÇEVRE ANALİZİ (1.5 km)","📍");
+    // Kategori bazlı grupla
+    const grp={};
+    parcel.pois.forEach(poi=>{
+      const k=poi.kategori||"Diğer";
+      if(!grp[k]) grp[k]=[];
+      grp[k].push(poi);
+    });
+    const katOrder=["Ulaşım","Sağlık","Eğitim","Ticaret","Konaklama","Resmi Kurum","Finans","Yeşil Alan","Dini","Sosyal","Diğer"];
+    katOrder.filter(k=>grp[k]?.length>0).forEach(kat=>{
+      checkPage(14);
+      font(8,true,C.dark); text(kat,mg,y); 
+      font(8,false,C.muted); text(`(${grp[kat].length})`,mg+25,y);
+      newLine(6);
+      const poiLine=grp[kat].map(p=>p.name+(p.dist?` ${p.dist}m`:"")); 
+      const wrapped=doc.splitTextToSize(poiLine.join("  ·  "),cW-4);
+      font(7,false,C.muted); doc.text(wrapped,mg+2,y); y+=wrapped.length*4+4;
+    });
+    hLine();
+  }
+
+  // ── Footer ──
+  checkPage(16);
+  setF([248,250,252]); doc.rect(0,H-18,W,18,"F");
+  setD(C.border); doc.line(0,H-18,W,H-18);
+  font(7,false,C.muted); text("Bu rapor ISDBM Digital tarafından otomatik oluşturulmuştur. Tahmini değerler içermekte olup yatırım tavsiyesi niteliği taşımaz.",mg,H-11);
+  font(7,true,C.dark); text("EGBIM | Geliştirici: Ertuğan Genel | Tüm Hakları Saklıdır",mg,H-5);
+  font(7,false,C.muted); text(`${new Date().toLocaleString("tr-TR")}`,W-mg,H-5,{align:"right"});
 
   doc.save(`ISDBM_${(parcel.projeAdi||parcel.ada||"Rapor").replace(/\s/g,"_")}_${new Date().toISOString().slice(0,10)}.pdf`);
 }
@@ -741,7 +937,7 @@ const FinansmanHesap=({alt,parcel})=>{
   return <div style={{background:'#fff',borderRadius:14,padding:20,border:'1.5px solid #e2e8f0'}}>
     <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>💰 Finansman & Nakit Akışı Analizi</div>
     <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>
-      AssetRevitalization metodolojisi • {alt?`${alt.icon} ${alt.name} için`:''} Kredi + Özkaynak karma finansman
+      EGBIM Finansman Motoru • {alt?`${alt.icon} ${alt.name} için`:''} Kredi + Özkaynak karma finansman
     </div>
     <div style={{fontSize:10,color:'#94a3b8',marginBottom:14,display:'flex',gap:12,flexWrap:'wrap'}}>
       <span>📅 Birim maliyet referansı: <b style={{color:'#2563eb'}}>{BIRIM_MALIYET_DONEM}</b></span>
@@ -1072,7 +1268,7 @@ const FinansmanHesap=({alt,parcel})=>{
           </div>
         </div>
         <div style={{marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,fontSize:11}}>
-          {[['IRR < %10','Düşük getiri','#ef4444'],['%10–20','Kabul edilebilir','#d97706'],['IRR > %20','Güçlü yatırım','#16a34a']].map(([l,d,c])=>(
+          {[['%10 Altı','Düşük getiri','#ef4444'],['%10-20','Kabul edilebilir','#d97706'],['%20 Üzeri','Güçlü yatırım','#16a34a']].map(([l,d,c])=>(
             <div key={l} style={{background:'#fff',borderRadius:6,padding:'6px 8px',border:`1px solid ${c}22`,textAlign:'center'}}>
               <div style={{fontWeight:700,color:c}}>{l}</div>
               <div style={{color:'#64748b'}}>{d}</div>
@@ -2728,10 +2924,45 @@ const App=()=>{
             </div>
           </div>
 
-          {/* POI */}
+          {/* POI — Kategori bazlı */}
           {p.pois&&p.pois.length>0&&<div className="card">
-            <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>📍 Yakın Çevre (1.5 km)</div>
-            <div style={{display:"flex",flexWrap:"wrap"}}>{p.pois.map((poi,i)=><span key={i} className="poi-chip">{poi.icon} {poi.name}</span>)}</div>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>📍 Yakın Çevre Analizi</div>
+            <div style={{fontSize:11,color:"#64748b",marginBottom:12}}>1.5 km yarıçap · {p.pois.length} tesis tespit edildi</div>
+            {(()=>{
+              const grp={};
+              p.pois.forEach(poi=>{
+                const k=poi.kategori||"Diğer";
+                if(!grp[k]) grp[k]=[];
+                grp[k].push(poi);
+              });
+              const katOrder=["Ulaşım","Sağlık","Eğitim","Ticaret","Konaklama","Resmi Kurum","Finans","Yeşil Alan","Dini","Sosyal","Diğer"];
+              const katRenk={
+                "Ulaşım":"#dbeafe","Sağlık":"#fee2e2","Eğitim":"#dcfce7","Ticaret":"#fef3c7",
+                "Konaklama":"#ede9fe","Resmi Kurum":"#f1f5f9","Finans":"#ecfdf5",
+                "Yeşil Alan":"#dcfce7","Dini":"#fff7ed","Sosyal":"#fdf2f8","Diğer":"#f8fafc",
+              };
+              return katOrder.filter(k=>grp[k]?.length>0).map(k=>(
+                <div key={k} style={{marginBottom:10}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#374151",marginBottom:5,display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{background:"#0f172a",color:"#fff",borderRadius:4,padding:"2px 7px",fontSize:9}}>{k}</span>
+                    <span style={{color:"#94a3b8",fontSize:9}}>{grp[k].length} tesis</span>
+                  </div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                    {grp[k].map((poi,i)=>(
+                      <span key={i} style={{
+                        background:katRenk[k]||"#f8fafc",borderRadius:7,
+                        padding:"4px 9px",fontSize:11,color:"#0f172a",
+                        display:"flex",alignItems:"center",gap:4,border:"1px solid rgba(0,0,0,.06)",
+                      }}>
+                        <span>{poi.icon}</span>
+                        <span style={{fontWeight:500}}>{poi.name}</span>
+                        {poi.dist&&<span style={{color:"#94a3b8",fontSize:9}}>{poi.dist}m</span>}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>}
 
           {/* Alternatives */}
