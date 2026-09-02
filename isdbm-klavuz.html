@@ -139,6 +139,11 @@ tr:hover td{background:#fafbfc}
   <a href="#proforma">💼 Pro-Forma & MOIC & IRR</a>
   <a href="#waterfall">🏗️ Equity Waterfall</a>
 
+  <div class="sidebar-section">Piyasa & Regresyon</div>
+  <a href="#piyasa">🏘️ Piyasa Değer Analizi</a>
+  <a href="#ols">🧮 OLS Regresyon Motoru</a>
+  <a href="#ulasim">🚇 Ulaşım Hiyerarşisi</a>
+
   <div class="sidebar-section">Veri Kaynakları</div>
   <a href="#kaynaklar">🗂️ Tüm Kaynaklar</a>
   <a href="#sinirlar">⚠️ Sınırlılıklar</a>
@@ -165,8 +170,11 @@ tr:hover td{background:#fafbfc}
     <a class="toc-item" href="#projeksiyon">12. Çok Yıllı Projeksiyon</a>
     <a class="toc-item" href="#proforma">13. Pro-Forma — MOIC & IRR</a>
     <a class="toc-item" href="#waterfall">14. Equity Waterfall</a>
-    <a class="toc-item" href="#kaynaklar">15. Veri Kaynakları</a>
-    <a class="toc-item" href="#sinirlar">16. Sınırlılıklar & Uyarılar</a>
+    <a class="toc-item" href="#piyasa">15. Piyasa Değer Analizi</a>
+    <a class="toc-item" href="#ols">16. OLS Regresyon Motoru</a>
+    <a class="toc-item" href="#ulasim">17. Ulaşım Hiyerarşisi</a>
+    <a class="toc-item" href="#kaynaklar">18. Veri Kaynakları</a>
+    <a class="toc-item" href="#sinirlar">19. Sınırlılıklar & Uyarılar</a>
   </div>
 </div>
 
@@ -271,6 +279,19 @@ tr:hover td{background:#fafbfc}
   <div class="step">
     <div class="step-num">6</div>
     <div class="step-content">
+      <div class="step-title">🏘️ Piyasa Değer Analizi</div>
+      <div class="step-desc">Parsel detayında "Piyasa Değer Analizi" panelinde:<br>
+      • <strong>Endeksa endeksi</strong> → ilçe bazlı m² fiyatı (dönem seçilebilir)<br>
+      • <strong>Referans ilan ekle</strong> → Sahibinden/Hepsiemlak'tan fiyat, m², oda, kat, yaş gir<br>
+      • <strong>Koordinat girince otomatik</strong> → Overpass'tan metro, okul, park mesafesi çekilir<br>
+      • <strong>5+ ilan → OLS Regresyon aktif</strong> → katsayılar + R² + güven aralığı<br>
+      • "🧮 Model Detayı" sekmesinde hangi faktörün fiyatı ne kadar etkilediğini gör</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">7</div>
+    <div class="step-content">
       <div class="step-title">💼 Pro-Forma Analizini İnceleyin</div>
       <div class="step-desc">"Pro-Forma" sekmesinde:<br>
       • <strong>MOIC</strong> — paranızın kaç katına çıktığı<br>
@@ -278,6 +299,18 @@ tr:hover td{background:#fafbfc}
       • <strong>Equity Waterfall</strong> — sermaye iadesi → tercihli getiri → kâr paylaşımı<br>
       • <strong>Pro-Forma tablosu</strong> — çıkış değeriyle tam dağıtım tablosu<br>
       PDF raporu indirin.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">8</div>
+    <div class="step-content">
+      <div class="step-title">📥 PDF Raporu İndir</div>
+      <div class="step-desc">Parsel detayında "PDF İndir" butonuyla A4 formatında rapor üretilir:<br>
+      • ISDBM skoru ve metrik skorları<br>
+      • İlk 4 yatırım alternatifi<br>
+      • TÜİK nüfus verisi<br>
+      • Yakın çevre tesis listesi</div>
     </div>
   </div>
 </div>
@@ -758,7 +791,171 @@ tr:hover td{background:#fafbfc}
   <div class="info-box note">✅ Son satır (🏁) çıkış yılıdır. Bu yılda hem yıllık getiri hem çıkış (satış) geliri birlikte gösterilir. MOIC ve IRR bu yıldaki değerlere göre hesaplanır.</div>
 </div>
 
-<!-- 15. KAYNAKLAR -->
+<!-- 15. PİYASA DEĞER ANALİZİ -->
+<div class="section" id="piyasa">
+  <div class="section-header">
+    <div class="section-icon" style="background:#f0fdf4">🏘️</div>
+    <div>
+      <div class="section-title">Piyasa Değer Analizi</div>
+      <div class="section-sub">Endeksa + IDW + OLS Regresyon — 3 katmanlı tahmin sistemi</div>
+    </div>
+  </div>
+
+  <p>Parsel detay ekranının "Piyasa Değer Analizi" paneli, mevcut en iyi veriyle m² fiyatını tahmin eder. Veri arttıkça tahmin güçlenir:</p>
+
+  <div style="display:flex;flex-direction:column;gap:10px;margin:16px 0">
+    <div class="card card-blue">
+      <h4 style="color:#1d4ed8">📍 Katman 1 — Endeksa İlçe Endeksi (her zaman aktif)</h4>
+      <p>Endeksa Q4 2024 ilçe ortalama m² fiyatı × TÜİK EKFE katsayısı. 60+ ilçe kapsıyor. Dönem dropdown ile 2024 Q4 – 2026 Q2 arası seçilebilir. Gerçek fiyatı biliyorsanız override edebilirsiniz.</p>
+    </div>
+    <div class="card card-green">
+      <h4 style="color:#166534">🔬 Katman 2 — IDW Mekansal Interpolasyon (2+ ilan)</h4>
+      <p>Kullanıcının girdiği referans ilanların koordinatlarından, parsele mesafeyle ters orantılı ağırlıkla fiyat tahmini yapılır. Airbnb Madrid Spatial repo metodolojisi.</p>
+    </div>
+    <div class="card card-purple">
+      <h4 style="color:#6d28d9">🧮 Katman 3 — OLS Regresyon (5+ ilan)</h4>
+      <p>En güçlü tahmin. Her faktörün (metro mesafesi, oda sayısı, bina yaşı…) fiyata katkısı β katsayısıyla ölçülür. R², RMSE ve güven aralığı hesaplanır.</p>
+    </div>
+  </div>
+
+  <h3>Tahmin Hiyerarşisi</h3>
+  <div class="formula">
+    <span class="comment">// Aktif tahmin: en güçlü mevcut veri kullanılır</span><br>
+    <span class="highlight">5+ ilan</span> → OLS Regresyon  (R², RMSE, katsayılar)<br>
+    <span class="highlight">2-4 ilan</span> → IDW Interpolasyon (mesafe ağırlıklı)<br>
+    <span class="highlight">0-1 ilan</span> → Endeksa Endeksi (ilçe ortalaması)<br>
+    <span class="highlight">Manuel</span>  → Override (kullanıcı kendi değerini girer)
+  </div>
+
+  <h3>Referans İlan Formu — Yeni Alanlar</h3>
+  <table>
+    <tr><th>Alan</th><th>Açıklama</th><th>OLS Değişkeni</th></tr>
+    <tr><td>Yapı Türü</td><td>Konut/Ofis/Karma/AVM — model seçimi</td><td>Model ayırıcı</td></tr>
+    <tr><td>Satış Fiyatı + m²</td><td>m² fiyatı otomatik hesaplanır</td><td>y (bağımlı değişken)</td></tr>
+    <tr><td>Oda Sayısı</td><td>Yalnızca konut türünde görünür</td><td>oda</td></tr>
+    <tr><td>Kat</td><td>İlanın bulunduğu kat</td><td>kat</td></tr>
+    <tr><td>Bina Yaşı</td><td>Yıl cinsinden</td><td>binaYasi</td></tr>
+    <tr><td>Koordinat (lat/lng)</td><td>Tab dışına çıkınca Overpass otomatik çalışır</td><td>Otomatik değişkenler</td></tr>
+    <tr><td>Otopark</td><td>Checkbox</td><td>otopark (0/1)</td></tr>
+    <tr><td>Ana Yola Cephe</td><td>Checkbox</td><td>anaYolCephe (0/1)</td></tr>
+  </table>
+
+  <div class="info-box note">✅ Koordinat girilip tab dışına tıklanınca Overpass API otomatik çalışır — metro mesafesi, okul sayısı, park varlığı regresyon değişkeni olarak eklenir.</div>
+</div>
+
+<!-- 16. OLS REGRESYON -->
+<div class="section" id="ols">
+  <div class="section-header">
+    <div class="section-icon" style="background:#faf5ff">🧮</div>
+    <div>
+      <div class="section-title">OLS Regresyon Motoru</div>
+      <div class="section-sub">PySAL/geosnap mantığı — saf JavaScript implementasyonu</div>
+    </div>
+  </div>
+
+  <p>PySAL kütüphanesinin mekansal regresyon metodolojisi tarayıcıda çalışacak şekilde JavaScript'e uyarlandı. Python veya sunucu gerektirmez.</p>
+
+  <h3>Yapı Türüne Göre Değişken Setleri</h3>
+  <table>
+    <tr><th>Yapı Türü</th><th>Değişkenler</th></tr>
+    <tr><td>🏘️ Konut</td><td>m², oda, kat, binaYaşı, <strong>metroMesafe</strong>, okulSayısı, parkVar, otopark, anaYolCephe, ilçeEndeks</td></tr>
+    <tr><td>💼 Ofis</td><td>m², kat, binaYaşı, <strong>metroMesafe, otoyolMesafe</strong>, otopark, anaYolCephe, nüfusYoğunluk, ilçeEndeks</td></tr>
+    <tr><td>🏢 Karma</td><td>m², oda, kat, binaYaşı, metroMesafe, okulSayısı, otopark, anaYolCephe, nüfusYoğunluk, ilçeEndeks</td></tr>
+    <tr><td>🛒 AVM</td><td>m², <strong>otoyolMesafe, nüfusYoğunluk, anaYolCephe</strong>, otopark, metroMesafe, ilçeEndeks</td></tr>
+  </table>
+
+  <h3>Matematiksel Formül</h3>
+  <div class="formula">
+    <span class="comment">// OLS: Ordinary Least Squares</span><br>
+    β = (X<sup>T</sup>X)<sup>-1</sup> X<sup>T</sup>y<br><br>
+    <span class="comment">// X: normalize edilmiş bağımsız değişkenler matrisi (0-1)</span><br>
+    <span class="comment">// y: m² fiyatları vektörü</span><br>
+    <span class="comment">// β: katsayılar vektörü</span><br><br>
+    <span class="comment">// Matris tersi: Gaussian elimination</span><br>
+    <span class="comment">// Normalize: (x - min) / (max - min)</span>
+  </div>
+
+  <h3>Model Kalite Metrikleri</h3>
+  <div class="formula">
+    R² = 1 − SS_res / SS_tot<br>
+    <span class="comment">// SS_res = Σ(y − ŷ)²  SS_tot = Σ(y − ȳ)²</span><br><br>
+    RMSE = √(SS_res / n)<br>
+    <span class="comment">// ₺/m² cinsinden ortalama tahmin hatası</span><br><br>
+    Güven aralığı = tahmin ± RMSE × 1.5
+  </div>
+
+  <table>
+    <tr><th>R² Aralığı</th><th>Güvenilirlik</th><th>Anlamı</th></tr>
+    <tr><td><span class="badge badge-green">≥ 0.75</span></td><td>Güçlü</td><td>Faktörler fiyatı iyi açıklıyor</td></tr>
+    <tr><td><span class="badge badge-blue">0.55–0.74</span></td><td>Orta</td><td>Makul tahmin, dikkatli kullanın</td></tr>
+    <tr><td><span class="badge badge-yellow">0.35–0.54</span></td><td>Zayıf</td><td>Yön doğru, rakam yaklaşık</td></tr>
+    <tr><td><span class="badge" style="background:#fee2e2;color:#ef4444">&lt; 0.35</span></td><td>Yetersiz</td><td>Daha fazla / kaliteli ilan gerekli</td></tr>
+  </table>
+
+  <h3>Model Detayı Sekmesi</h3>
+  <p>"🧮 Model Detayı" sekmesinde şunlar görünür:</p>
+  <table>
+    <tr><th>Gösterge</th><th>Açıklama</th></tr>
+    <tr><td>Katsayılar tablosu</td><td>Her değişkenin m² fiyatına etkisi (₺/birim)</td></tr>
+    <tr><td>Yön ikonu</td><td>📈 pozitif / 📉 negatif / ➡️ nötr etki</td></tr>
+    <tr><td>R² + RMSE</td><td>Model kalitesi ve ortalama hata</td></tr>
+    <tr><td>Parsel tahmini</td><td>Parselin özelliklerine göre m² tahmini</td></tr>
+    <tr><td>Güven aralığı</td><td>±RMSE×1.5 olasılık bandı</td></tr>
+  </table>
+
+  <div class="info-box warn">⚠️ OLS aynı ilçe ve yapı türü için güvenilirdir. Pendik konut için 10 ilan girdiyseniz, model Pendik konutunu tahmin eder — Kadıköy için değil. Her bölge/tür kombinasyonu için ayrı ilan girmeniz gerekir.</div>
+</div>
+
+<!-- 17. ULAŞIM HİYERARŞİSİ -->
+<div class="section" id="ulasim">
+  <div class="section-header">
+    <div class="section-icon" style="background:#eff6ff">🚇</div>
+    <div>
+      <div class="section-title">Ulaşım Hiyerarşisi</div>
+      <div class="section-sub">Metro her yerde yok — hiyerarşik ulaşım skoru</div>
+    </div>
+  </div>
+
+  <p>Metro her şehirde bulunmaz. ISDBM, ulaşım değişkenini yapı türüne göre iki ayrı faktöre böler:</p>
+
+  <div class="metric-grid">
+    <div class="metric-card">
+      <div class="metric-name">🚇 Toplu Taşıma Erişimi</div>
+      <div class="metric-desc"><strong>Konut, Ofis, Karma, AVM</strong> için ağır basar.<br>Sabit raylı sistemler (metro/tramvay) öncelikli — güvenilir, değer artışına doğrudan katkısı var.</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">🛣️ Karayolu/Lojistik Erişimi</div>
+      <div class="metric-desc"><strong>Ofis ve AVM</strong> için önemli.<br>Otoyol çıkışı, TIR parkı, liman mesafesi. Konut için düşük, ticari için yüksek ağırlık.</div>
+    </div>
+  </div>
+
+  <h3>Overpass API Ulaşım Sorgusu</h3>
+  <table>
+    <tr><th>OSM Tag</th><th>Tür</th><th>Konut Ağırlığı</th><th>Ofis/AVM Ağırlığı</th></tr>
+    <tr><td>railway=station/halt</td><td>Metro, Marmaray, Banliyö</td><td>⭐⭐⭐</td><td>⭐⭐⭐</td></tr>
+    <tr><td>railway=tram_stop</td><td>Tramvay</td><td>⭐⭐⭐</td><td>⭐⭐</td></tr>
+    <tr><td>amenity=ferry_terminal</td><td>Vapur iskelesi</td><td>⭐⭐</td><td>⭐⭐</td></tr>
+    <tr><td>amenity=bus_station</td><td>Otobüs terminali</td><td>⭐</td><td>⭐⭐</td></tr>
+    <tr><td>highway=bus_stop</td><td>Otobüs durağı</td><td>⭐</td><td>⭐</td></tr>
+    <tr><td>highway=motorway_junction</td><td>Otoyol çıkışı</td><td>➖</td><td>⭐⭐⭐</td></tr>
+  </table>
+
+  <div class="info-box tip">💡 Metro ve otobüs terminali aynı değildir. Metro sabit hat, güvenilir, değer artışına doğrudan katkısı var. Otobüs terminali gürültü ve trafik getirdiği için konut için bazen negatif etkili bile olabilir.</div>
+
+  <h3>Metro Olmayan Şehirlerde</h3>
+  <p>Metro yoksa <code>metroMesafe = null</code> olarak kaydedilir — "0 metre" değil. Regresyon modeli bu değişkeni dışarıda bırakır. Küçük şehirlerde otobüs durağı ve otoyol erişimi ön plana çıkar, bu da gerçeği yansıtır.</p>
+
+  <h3>Sorgu Yarıçapı</h3>
+  <table>
+    <tr><th>Tesis Türü</th><th>Yarıçap</th><th>Gerekçe</th></tr>
+    <tr><td>Metro, tramvay, vapur</td><td>500m</td><td>Yürüme mesafesi</td></tr>
+    <tr><td>Otobüs durağı</td><td>500m</td><td>Yürüme mesafesi</td></tr>
+    <tr><td>Okul, park</td><td>1000m</td><td>Mahalle servisi</td></tr>
+    <tr><td>Otoyol çıkışı</td><td>2000m</td><td>Araçla erişim</td></tr>
+  </table>
+</div>
+
+<!-- 18. KAYNAKLAR -->
 <div class="section" id="kaynaklar">
   <div class="section-header">
     <div class="section-icon" style="background:#f8fafc">🗂️</div>
@@ -782,6 +979,8 @@ tr:hover td{background:#fafbfc}
     <tr><td>Metrik otomatik hesap</td><td>Qbiq proximity band metodolojisi</td><td>POI verisi ile</td><td>Hesaplama</td></tr>
     <tr><td>Finansman modeli</td><td>AssetRevitalization repo metodolojisi</td><td>—</td><td>Hesaplama</td></tr>
     <tr><td>MOIC / IRR / Waterfall</td><td>Pro-Forma Investment Engine repo</td><td>—</td><td>Newton-Raphson hesaplama</td></tr>
+    <tr><td>OLS Regresyon</td><td>PySAL/geosnap workshop-pysal-wrsa26 mantığı</td><td>İlan bazlı</td><td>Gaussian elimination, saf JS</td></tr>
+    <tr><td>Ulaşım değişkenleri</td><td>Overpass API (koordinat bazlı, anlık)</td><td>Anlık</td><td>500m–2km yarıçap sorgusu</td></tr>
     <tr><td>Parsel depolama</td><td>Browser LocalStorage + JSON export</td><td>Anlık</td><td>Lokal</td></tr>
   </table>
 </div>
@@ -826,7 +1025,7 @@ tr:hover td{background:#fafbfc}
 
   <div style="margin-top:32px;padding:20px;background:#0f172a;border-radius:12px;color:#94a3b8;font-size:12px;text-align:center">
     <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:6px">ISDBM Digital · ARGEPLANO</div>
-    Kılavuz v1.1 · Eylül 2026 — Pro-Forma, MOIC, IRR, Waterfall eklendi · Tüm hesaplar tahmini değer içerir, yatırım tavsiyesi değildir.
+    Kılavuz v1.2 · Eylül 2026 — OLS Regresyon, Piyasa Analizi, Ulaşım Hiyerarşisi eklendi · Tüm hesaplar tahmini değer içerir, yatırım tavsiyesi değildir.
   </div>
 </div>
 
