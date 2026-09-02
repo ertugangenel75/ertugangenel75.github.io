@@ -602,224 +602,351 @@ const MapFull=({parcels,onParcelSaved,onDrawnCoords,drawMode,setDrawMode,flyTo})
   </div>;
 };
 
-// ── PDF Generator — Profesyonel ───────────────────────────────────────────
-function generatePDF(parcel,alts,isdbmScore){
+
+// Finansman verisini PDF için hazırla
+function buildFinansmanForPDF(capex, ozkaynakOran, krediFaiz, krediVade, yillikGetiriOran, moic, irr, breakEvenYil) {
+  const fmt=n=>{const a=Math.abs(n),s=n<0?'-':'';
+    return s+(a>=1e9?(a/1e9).toFixed(1)+'B TL':a>=1e6?(a/1e6).toFixed(1)+'M TL':a>=1e3?(a/1e3).toFixed(0)+'K TL':String(a)+' TL');
+  };
+  const ozk=Math.round(capex*(ozkaynakOran/100));
+  const krd=capex-ozk;
+  const ayr=krediFaiz/100/12;
+  const ay=krediVade*12;
+  const taksit=krd>0&&ayr>0?Math.round(krd*(ayr*Math.pow(1+ayr,ay))/(Math.pow(1+ayr,ay)-1)):Math.round(krd/(ay||1));
+  const getiri=Math.round(capex*(yillikGetiriOran/100)/12);
+  return {
+    capexStr:fmt(capex), ozkaynakStr:fmt(ozk), krediStr:fmt(krd),
+    ozkaynakOran, faiz:krediFaiz, vade:krediVade,
+    aylikGetiriStr:fmt(getiri), aylikTaksitStr:fmt(taksit),
+    aylikNet:getiri-taksit, aylikNetStr:fmt(getiri-taksit),
+    moic:moic||'—', irr:irr||'—',
+    geriDonus:getiri-taksit>0?((capex/((getiri-taksit)*12)).toFixed(1)):'—',
+    breakEven:breakEvenYil||'—',
+  };
+}
+
+// ── PDF Generator — v2 Profesyonel ───────────────────────────────────────
+// Türkçe karakter dönüşüm tablosu (jsPDF helvetica Türkçe desteklemez)
+function trFix(s){
+  if(!s) return '';
+  return String(s)
+    .replace(/ğ/g,'g').replace(/Ğ/g,'G')
+    .replace(/ü/g,'u').replace(/Ü/g,'U')
+    .replace(/ş/g,'s').replace(/Ş/g,'S')
+    .replace(/ı/g,'i').replace(/İ/g,'I')
+    .replace(/ö/g,'o').replace(/Ö/g,'O')
+    .replace(/ç/g,'c').replace(/Ç/g,'C')
+    .replace(/â/g,'a').replace(/Â/g,'A')
+    .replace(/î/g,'i').replace(/û/g,'u');
+}
+
+function generatePDF(parcel, alts, isdbmScore, finansman){
   const{jsPDF}=window.jspdf;
-  const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
-  const W=210, H=297, mg=16, cW=W-2*mg;
-  let y=0;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const W=210, H=297, mg=14, cW=W-2*mg;
+  let y=0, page=1;
 
-  // ── Renk paleti ──
-  const C={
-    dark:[15,23,42], mid:[30,41,59], muted:[71,85,105], light:[148,163,184],
-    white:[255,255,255], bg:[248,250,252], border:[226,232,240],
-    green:[22,163,74], blue:[37,99,235], amber:[217,119,6], red:[239,68,68],
-    accent:[37,99,235],
-  };
-  const scoreColor=(s)=>s>=85?C.green:s>=75?C.blue:s>=60?C.amber:C.red;
-  const scoreLabel=(s)=>s>=85?"Mükemmel Fırsat":s>=75?"Güçlü Fırsat":s>=60?"Orta Potansiyel":"Düşük Potansiyel";
+  // Renkler
+  const dark=[15,23,42], blue=[37,99,235], green=[22,163,74],
+        amber=[217,119,6], red=[239,68,68], gray=[100,116,139],
+        lightgray=[226,232,240], bg=[248,250,252], white=[255,255,255];
 
-  // ── Yardımcı fonksiyonlar ──
-  const setC=(col)=>doc.setTextColor(...col);
-  const setF=(col)=>doc.setFillColor(...col);
-  const setD=(col)=>doc.setDrawColor(...col);
-  const font=(sz,bold=false,col=C.dark)=>{
+  const sCol=s=>s>=85?green:s>=75?blue:s>=60?amber:red;
+  const sLbl=s=>s>=85?'Mukemmel Firsat':s>=75?'Guclu Firsat':s>=60?'Orta Potansiyel':'Dusuk Potansiyel';
+
+  // Yardımcılar
+  const rgb=(c)=>doc.setTextColor(...c);
+  const fill=(c)=>doc.setFillColor(...c);
+  const draw=(c)=>doc.setDrawColor(...c);
+  const f=(sz,bold=false,col=dark)=>{
     doc.setFontSize(sz);
-    doc.setFont("helvetica",bold?"bold":"normal");
-    setC(col);
+    doc.setFont('helvetica',bold?'bold':'normal');
+    rgb(col);
   };
-  const text=(t,x,_y,opts={})=>doc.text(t,x,_y,opts);
-  const newLine=(h=6)=>{y+=h;};
+  const t=(txt,x,_y,opts={})=>doc.text(trFix(String(txt||'')),x,_y,opts);
+  const ln=(h=5)=>{y+=h;};
+  const hLine=(col=lightgray,thick=0.3)=>{
+    draw(col); doc.setLineWidth(thick);
+    doc.line(mg,y,W-mg,y); ln(4);
+  };
+
   const checkPage=(need=20)=>{
-    if(y+need>H-20){
-      doc.addPage();
-      y=16;
-      // Mini header on new pages
-      setF(C.dark); doc.rect(0,0,W,8,"F");
-      font(7,false,C.light); text("ISDBM Digital — EGBIM Yatırım Analiz Raporu",mg,6);
-      font(7,false,C.light); text(`${parcel.projeAdi||parcel.ada||"İsimsiz Parsel"}`,W-mg,6,{align:"right"});
+    if(y+need>H-16){
+      // Footer
+      fill(bg); doc.rect(0,H-12,W,12,'F');
+      draw(lightgray); doc.line(0,H-12,W,H-12);
+      f(7,false,gray);
+      t('ISDBM Digital | EGBIM | Gelistirici: Ertug an Genel | Tum Haklari Saklidir',mg,H-5);
+      f(7,false,gray); t(`Sayfa ${page}`,W-mg,H-5,{align:'right'});
+
+      doc.addPage(); page++; y=14;
+      // Mini header
+      fill(dark); doc.rect(0,0,W,9,'F');
+      f(7,true,white); t('ISDBM Digital - EGBIM Yatirim Analiz Raporu',mg,6);
+      f(7,false,[148,163,184]); t(trFix(parcel.projeAdi||parcel.ada||'Isimsiz Parsel'),W-mg,6,{align:'right'});
       y=14;
     }
   };
-  const hLine=(col=C.border)=>{setD(col);doc.line(mg,y,W-mg,y);newLine(4);};
-  const sectionHeader=(title,icon="")=>{
-    checkPage(16);
-    setF(C.bg); doc.rect(mg,y-4,cW,10,"F");
-    font(9,true,C.dark); text((icon?" "+icon+" "+title:title),mg+3,y+2);
-    newLine(10);
-  };
-  const miniCard=(x,_y,w,h,fillCol,label,value,valCol=C.dark,labelCol=C.muted)=>{
-    setF(fillCol); doc.roundedRect(x,_y,w,h,2,2,"F");
-    setD(C.border); doc.roundedRect(x,_y,w,h,2,2,"S");
-    font(7,false,labelCol); text(label,x+w/2,_y+5,{align:"center"});
-    font(11,true,valCol); text(String(value),x+w/2,_y+11,{align:"center"});
+
+  const secHeader=(title,icon='')=>{
+    checkPage(14);
+    fill([239,246,255]); doc.rect(mg,y-4,cW,11,'F');
+    draw(blue); doc.setLineWidth(0.5); doc.line(mg,y-4,mg,y+7);
+    f(10,true,dark); t(icon+' '+title,mg+4,y+3);
+    ln(11);
   };
 
-  // ══════════════════════════════════════════════════════
-  // SAYFA 1
-  // ══════════════════════════════════════════════════════
+  const miniBox=(x,_y,w,h,label,value,valcol=dark)=>{
+    fill(white); doc.rect(x,_y,w,h,'F');
+    draw(lightgray); doc.rect(x,_y,w,h,'S');
+    f(7,false,gray); t(label,x+w/2,_y+5,{align:'center'});
+    f(10,true,valcol); t(String(value||'-').slice(0,14),x+w/2,_y+11,{align:'center'});
+  };
 
-  // ── Kapak header ──
-  setF(C.dark); doc.rect(0,0,W,42,"F");
-  // Sol logo alanı
-  setF([37,99,235]); doc.roundedRect(mg,6,28,28,3,3,"F");
-  font(14,true,C.white); text("ISDBM",mg+14,16,{align:"center"});
-  font(7,false,[148,163,184]); text("Digital",mg+14,22,{align:"center"});
+  const bar=(label,val,weight,_y)=>{
+    const col=sCol(val);
+    f(8,false,dark); t(label,mg+2,_y);
+    fill(lightgray); doc.rect(mg+52,_y-3,85,5,'F');
+    fill(col); doc.rect(mg+52,_y-3,85*(val/100),5,'F');
+    f(9,true,col); t(String(val),mg+142,_y,{align:'right'});
+    f(7,false,gray); t('%'+Math.round(weight*100)+' agirlik',W-mg,_y,{align:'right'});
+  };
+
+  // ══ SAYFA 1 HEADER ══
+  fill(dark); doc.rect(0,0,W,36,'F');
+
+  // Logo kutu
+  fill(blue); doc.roundedRect(mg,5,24,24,2,2,'F');
+  f(11,true,white); t('ISDBM',mg+12,14,{align:'center'});
+  f(7,false,[148,163,184]); t('Digital',mg+12,20,{align:'center'});
+
   // Başlık
-  font(16,true,C.white); text("YATIRIM ANALİZ RAPORU",mg+34,14);
-  font(8,false,[148,163,184]); text("Investment Site Development Business Model",mg+34,21);
-  font(7,false,[148,163,184]); text("EGBIM | Geliştirici: Ertuğan Genel",mg+34,28);
-  // Tarih/sağ
-  font(8,false,[96,165,250]); text(new Date().toLocaleDateString("tr-TR",{day:"2-digit",month:"long",year:"numeric"}),W-mg,14,{align:"right"});
-  font(7,false,[148,163,184]); text("Tüm Hakları Saklıdır",W-mg,21,{align:"right"});
-  y=50;
+  f(15,true,white); t('YATIRIM ANALIZ RAPORU',mg+30,13);
+  f(8,false,[148,163,184]); t('Investment Site Development Business Model | EGBIM',mg+30,20);
+  f(7,false,[148,163,184]); t('Gelistirici: Ertug an Genel | Tum Haklari Saklidir',mg+30,26);
 
-  // ── Parsel başlık bandı ──
-  const sc=isdbmScore;
-  const sCol=scoreColor(sc);
-  setF(C.bg); doc.rect(mg,y,cW,24,"F");
-  setD(C.border); doc.rect(mg,y,cW,24,"S");
-  // Skor dairesi
-  setF(sCol); doc.circle(mg+14,y+12,10,"F");
-  font(14,true,C.white); text(String(sc),mg+14,y+13.5,{align:"center"});
-  // Parsel adı
-  font(13,true,C.dark); text(parcel.projeAdi||parcel.ada||"İsimsiz Parsel",mg+28,y+9);
-  font(9,false,C.muted); text(`${parcel.il||"—"} / ${parcel.ilce||"—"} — ${parcel.mahalle||"—"}`,mg+28,y+17);
+  // Tarih
+  f(8,false,[96,165,250]);
+  t(new Date().toLocaleDateString('tr-TR',{day:'2-digit',month:'long',year:'numeric'}),W-mg,13,{align:'right'});
+  y=44;
+
+  // ══ PARSEL KART ══
+  const sc=isdbmScore||0;
+  const scol=sCol(sc);
+
+  fill(bg); doc.rect(mg,y,cW,28,'F');
+  draw(lightgray); doc.rect(mg,y,cW,28,'S');
+
+  // Skor
+  fill(scol); doc.circle(mg+13,y+14,10,'F');
+  f(13,true,white); t(String(sc),mg+13,y+15,{align:'center'});
+  f(6,false,white); t('SKOR',mg+13,y+20,{align:'center'});
+
+  // Parsel bilgisi
+  f(12,true,dark); t(trFix(parcel.projeAdi||parcel.ada||'Isimsiz Parsel'),mg+28,y+9);
+  f(8,false,gray);
+  t(trFix((parcel.il||'-')+' / '+(parcel.ilce||'-')+(parcel.mahalle?' - '+parcel.mahalle:'')),mg+28,y+16);
+  t(new Date().toLocaleDateString('tr-TR'),mg+28,y+22);
+
   // Skor etiketi
-  font(9,true,sCol); text(scoreLabel(sc),W-mg,y+9,{align:"right"});
-  font(8,false,C.muted); text("ISDBM Bütünleşik Skor",W-mg,y+17,{align:"right"});
-  y+=30;
+  f(10,true,scol); t(sLbl(sc),W-mg,y+9,{align:'right'});
+  f(7,false,gray); t('ISDBM Butunlesik Skor',W-mg,y+16,{align:'right'});
+  y+=32;
 
-  // ── 4 mini kart ──
+  // 4 mini kart
   const cards=[
-    [parcel.alan?Number(parcel.alan).toLocaleString("tr-TR")+" m²":"—","Parsel Alanı"],
-    [parcel.planDurumu||"—","İmar Durumu"],
-    [parcel.mevcutKullanim||"—","Mevcut Kullanım"],
-    [(parcel.ada&&parcel.parsel)?`${parcel.ada}/${parcel.parsel}`:"—","Ada/Parsel"],
+    [Number(parcel.alan||0).toLocaleString('tr-TR')+' m2','Parsel Alani'],
+    [trFix(parcel.planDurumu||'-'),'Imar Durumu'],
+    [trFix(parcel.mevcutKullanim||'-'),'Mevcut Kullanim'],
+    [(parcel.ada&&parcel.parsel)?parcel.ada+'/'+parcel.parsel:'-','Ada/Parsel'],
   ];
-  const cw4=(cW-9)/4;
-  cards.forEach(([v,l],i)=>{
-    miniCard(mg+i*(cw4+3),y,cw4,16,C.white,l,v.length>12?v.slice(0,11)+"…":v,C.dark,C.muted);
-  });
-  y+=22; hLine();
+  const bw=(cW-9)/4;
+  cards.forEach(([v,l],i)=>miniBox(mg+i*(bw+3),y,bw,16,l,v));
+  y+=20; hLine();
 
-  // ── Metrik çubukları ──
-  sectionHeader("ANALİZ METRİKLERİ","📊");
-  METRICS.forEach((m,i)=>{
-    checkPage(12);
-    const sv=parcel.metrics?.[m.key]||50;
-    const col=scoreColor(sv);
-    // Satır bg
-    if(i%2===0){setF([250,251,252]); doc.rect(mg,y-4,cW,9,"F");}
-    font(8,false,C.dark); text(m.label,mg+2,y+1);
-    // Bar arka plan
-    setF(C.border); doc.rect(mg+55,y-2,90,5,"F");
-    // Bar dolu
-    setF(col); doc.rect(mg+55,y-2,90*(sv/100),5,"F");
-    // Değer
-    font(9,true,col); text(String(sv),mg+150,y+1);
-    font(7,false,C.muted); text(`%${Math.round(m.weight*100)} ağırlık`,W-mg,y+1,{align:"right"});
-    newLine(9);
+  // ══ METRİKLER ══
+  secHeader('ANALIZ METRIKLERI','[M]');
+  const MKEYS=[
+    {key:'ulasim',label:'Ulasim',weight:.20},
+    {key:'demografi',label:'Demografi',weight:.15},
+    {key:'ticari',label:'Ticari Potansiyel',weight:.20},
+    {key:'altyapi',label:'Altyapi',weight:.20},
+    {key:'risk',label:'Risk',weight:.10},
+    {key:'gelisme',label:'Gelisme Potansiyeli',weight:.15},
+  ];
+  MKEYS.forEach((m,i)=>{
+    checkPage(10);
+    if(i%2===0){fill([250,251,252]); doc.rect(mg,y-4,cW,8,'F');}
+    bar(m.label, parcel.metrics?.[m.key]||50, m.weight, y);
+    ln(8);
   });
-  hLine();
+  ln(2); hLine();
 
-  // ── Yatırım alternatifleri ──
-  sectionHeader("YATIRIM ALTERNATİFLERİ","🏗️");
-  alts.slice(0,4).forEach((alt,i)=>{
-    checkPage(28);
-    const col=scoreColor(alt.score);
-    // Kart arka plan
-    setF(i===0?[239,246,255]:C.bg);
-    doc.roundedRect(mg,y,cW,22,2,2,"F");
-    setD(i===0?C.accent:C.border);
-    doc.roundedRect(mg,y,cW,22,2,2,"S");
-    // Sıra numarası
-    setF(col); doc.circle(mg+7,y+11,5,"F");
-    font(9,true,C.white); text(String(i+1),mg+7,y+11.5,{align:"center"});
-    // İsim ve detay
-    font(10,true,C.dark); text(alt.name,mg+16,y+8);
-    font(7,false,C.muted);
-    const capexStr=alt.capexFmt?alt.capexFmt.combined:alt.capex;
-    text(`CAPEX: ${capexStr}   ROI: ${alt.roi}   IRR: ${alt.irr}   Süre: ${alt.sure}`,mg+16,y+14);
-    font(7,false,C.muted); text(`İnşaat Sınıfı: ${alt.sinif||"—"}   Emsal: ${alt.emsalDef||"—"}`,mg+16,y+19);
-    // Skor
-    font(14,true,col); text(String(alt.score),W-mg-4,y+12,{align:"right"});
-    font(7,false,col); text(alt.uyg,W-mg-4,y+19,{align:"right"});
-    y+=26;
+  // ══ YATIRIM ALTERNATİFLERİ ══
+  secHeader('YATIRIM ALTERNATIFLER I','[Y]');
+  alts.slice(0,6).forEach((alt,i)=>{
+    checkPage(22);
+    const col=sCol(alt.score);
+    fill(i===0?[239,246,255]:i%2===0?bg:white);
+    doc.rect(mg,y,cW,20,'F');
+    draw(i===0?blue:lightgray); doc.rect(mg,y,cW,20,'S');
+
+    fill(col); doc.circle(mg+7,y+10,5,'F');
+    f(9,true,white); t(String(i+1),mg+7,y+10.5,{align:'center'});
+
+    f(10,true,dark); t(trFix(alt.name),mg+16,y+7);
+
+    const capexStr=alt.capexFmt?.combined||alt.capexFmt?.tlStr||
+      (alt.capexTL?((alt.capexTL/1000000).toFixed(1)+'M TL'):'-');
+    f(7,false,gray);
+    t('CAPEX: '+trFix(capexStr)+'  ROI: '+alt.roi+'  IRR: '+alt.irr,mg+16,y+13);
+    t('Sinif: '+(alt.sinif||'-')+'  Emsal: '+(alt.emsalDef||'-')+'  Sure: '+alt.sure,mg+16,y+18);
+
+    f(13,true,col); t(String(alt.score),W-mg-4,y+10,{align:'right'});
+    f(7,false,col); t(trFix(alt.uyg||''),W-mg-4,y+17,{align:'right'});
+    y+=22;
   });
   hLine();
 
-  // ── CAPEX özet (seçili alternatif varsa) ──
+  // ══ CAPEX DETAY ══
   const topAlt=alts[0];
   if(topAlt?.capexTL){
-    checkPage(28);
-    sectionHeader("EN YÜKSEK PUANLI YATIRIM — MALİYET TAHMİNİ","💰");
+    checkPage(26);
+    secHeader('EN YUKSEK PUANLI - MALIYET TAHMINI','[C]');
     const cx=topAlt.capexDetail;
-    const cw3=(cW-6)/3;
-    [
-      [topAlt.capexFmt?.tlStr||"—","CAPEX (₺)",C.dark],
-      [topAlt.capexFmt?.usdStr||"—","CAPEX ($)",C.blue],
-      [cx?(Math.round(cx.insAlan).toLocaleString("tr-TR")+" m²"):"—","İnşaat Alanı",C.muted],
-    ].forEach(([v,l,col],i)=>{
-      miniCard(mg+i*(cw3+3),y,cw3,18,C.white,l,v,col,C.muted);
-    });
-    y+=22;
-    font(7,false,C.muted);
-    if(cx) text(`Alan ${cx.alan.toLocaleString("tr-TR")} m² × Emsal ${cx.emsal} × Birim ${cx.birim.toLocaleString("tr-TR")} ₺/m² × Lokasyon ${cx.lokKat}x × Sınıf ${cx.insKat}x`,mg,y);
-    newLine(8); hLine();
+    const tlStr=topAlt.capexTL>=1e9?(topAlt.capexTL/1e9).toFixed(2)+'B TL':
+                topAlt.capexTL>=1e6?(topAlt.capexTL/1e6).toFixed(1)+'M TL':
+                (topAlt.capexTL/1000).toFixed(0)+'K TL';
+    const usdStr=topAlt.capexUSD>=1e6?(topAlt.capexUSD/1e6).toFixed(1)+'M $':
+                 (topAlt.capexUSD/1000).toFixed(0)+'K $';
+    const bw3=(cW-6)/3;
+    [[tlStr,'CAPEX (TL)',blue],[usdStr,'CAPEX ($)',green],
+     [cx?Math.round(cx.insAlan).toLocaleString('tr-TR')+' m2':'-','Insaat Alani',gray]]
+    .forEach(([v,l,c],i)=>miniBox(mg+i*(bw3+3),y,bw3,16,l,v,c));
+    y+=18;
+    if(cx){
+      f(7,false,gray);
+      t('Alan '+cx.alan.toLocaleString('tr-TR')+' m2 x Emsal '+cx.emsal+
+        ' x Birim '+cx.birim.toLocaleString('tr-TR')+' TL/m2 x Lok.'+cx.lokKat+'x x Sinif '+cx.insKat+'x',mg,y);
+    }
+    ln(8); hLine();
   }
 
-  // ── TÜİK Nüfus ──
-  if(parcel.il&&TUIK_NUFUS[parcel.il]){
-    checkPage(20);
-    sectionHeader("NÜFUS VERİSİ","👥");
-    const ilN=TUIK_NUFUS[parcel.il]?.il;
-    const normIl=s=>(s||"").toLowerCase().trim().replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ı/g,"i").replace(/ö/g,"o").replace(/ç/g,"c");
-    const ilData=TUIK_NUFUS[parcel.il];
-    const ilceKey=ilData?Object.keys(ilData.ilceler||{}).find(k=>normIl(k)===normIl(parcel.ilce)||normIl(k).includes(normIl(parcel.ilce))||normIl(parcel.ilce).includes(normIl(k))):null;
-    const ilceN=ilceKey?ilData.ilceler[ilceKey]:null;
-    const cw2=(cW-3)/2;
-    [
-      [ilN?ilN.toLocaleString("tr-TR")+" kişi":"—",parcel.il+" İl Nüfusu"],
-      [ilceN?ilceN.toLocaleString("tr-TR")+" kişi":"—",(ilceKey||parcel.ilce)+" İlçe Nüfusu"],
-    ].forEach(([v,l],i)=>{ miniCard(mg+i*(cw2+3),y,cw2,16,C.white,l,v,C.dark,C.muted); });
+  // ══ PİYASA DEĞERİ ══
+  // Bu veriyi parcel'dan al veya window'dan geç
+  const piyasaM2=parcel.piyasaM2||(window._lastPiyasaM2)||null;
+  const piyasaDeger=piyasaM2&&parcel.alan?Math.round(piyasaM2*parcel.alan):null;
+  if(piyasaM2){
+    checkPage(22);
+    secHeader('PIYASA DEGER ANALIZI','[P]');
+    const bw2=(cW-3)/2;
+    const m2Str=piyasaM2.toLocaleString('tr-TR')+' TL/m2';
+    const topStr=piyasaDeger>=1e9?(piyasaDeger/1e9).toFixed(2)+'B TL':
+                 piyasaDeger>=1e6?(piyasaDeger/1e6).toFixed(1)+'M TL':
+                 (piyasaDeger/1000).toFixed(0)+'K TL';
+    miniBox(mg,y,bw2,16,'m2 Birim Fiyati',m2Str,blue);
+    miniBox(mg+bw2+3,y,bw2,16,'Tahmini Parsel Degeri',topStr,green);
     y+=20; hLine();
   }
 
-  // ── POI — Yakın çevre ──
+  // ══ FİNANSMAN ══
+  // finansman objesi dışarıdan geçilecek
+  if(finansman){
+    checkPage(32);
+    secHeader('FINANSMAN & NAKIT AKISI','[F]');
+    const fw=(cW-12)/5;
+    [
+      [finansman.capexStr||'-','Toplam CAPEX',dark],
+      [finansman.ozkaynakStr||'-','Ozkaynak (%'+finansman.ozkaynakOran+')',blue],
+      [finansman.krediStr||'-','Banka Kredisi',red],
+      [finansman.vade+'yil','Kredi Vadesi',gray],
+      ['%'+finansman.faiz,'Yillik Faiz',amber],
+    ].forEach(([v,l,c],i)=>miniBox(mg+i*(fw+3),y,fw,16,l,v,c));
+    y+=19;
+
+    // Nakit akışı
+    fill(dark); doc.rect(mg,y,cW,26,'F');
+    f(8,true,[148,163,184]); t('AYLIK NAKIT AKISI',mg+3,y+6);
+    f(9,false,[148,163,184]); t('(+) Aylik Getiri',mg+3,y+13);
+    f(9,true,green); t(finansman.aylikGetiriStr||'-',W-mg-3,y+13,{align:'right'});
+    f(9,false,[148,163,184]); t('(-) Kredi Taksiti',mg+3,y+19);
+    f(9,true,red); t(finansman.aylikTaksitStr||'-',W-mg-3,y+19,{align:'right'});
+    draw([30,40,60]); doc.line(mg+2,y+21,W-mg-2,y+21);
+    f(10,true,finansman.aylikNet>=0?[74,222,128]:[248,113,113]);
+    t('Net Aylik: '+(finansman.aylikNetStr||'-'),mg+3,y+25);
+    y+=30;
+
+    // KPI
+    const kfw=(cW-9)/4;
+    [
+      [finansman.moic+'x','MOIC',finansman.moic>=2?green:amber],
+      ['%'+finansman.irr+'/yil','IRR',+finansman.irr>=20?green:amber],
+      [finansman.geriDonus+' yil','Geri Donus',gray],
+      [finansman.breakEven+'. yil','Break-Even',blue],
+    ].forEach(([v,l,c],i)=>miniBox(mg+i*(kfw+3),y,kfw,16,l,v,c));
+    y+=20; hLine();
+  }
+
+  // ══ NÜFUS ══
+  if(parcel.il&&TUIK_NUFUS[parcel.il]){
+    checkPage(22);
+    secHeader('NUFUS VERISI (TUIK ADNKS 2023)','[N]');
+    const ilN=TUIK_NUFUS[parcel.il]?.il;
+    const normX=s=>(s||'').toLowerCase().trim()
+      .replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s')
+      .replace(/ı/g,'i').replace(/ö/g,'o').replace(/ç/g,'c');
+    const ilData=TUIK_NUFUS[parcel.il];
+    const ilceKey=ilData?Object.keys(ilData.ilceler||{}).find(k=>
+      normX(k)===normX(parcel.ilce)||normX(k).includes(normX(parcel.ilce))
+    ):null;
+    const ilceN=ilceKey?ilData.ilceler[ilceKey]:null;
+    const bwn=(cW-3)/2;
+    miniBox(mg,y,bwn,16,trFix(parcel.il)+' Il Nufusu',
+      ilN?ilN.toLocaleString('tr-TR')+' kisi':'-',dark);
+    miniBox(mg+bwn+3,y,bwn,16,trFix(ilceKey||parcel.ilce||'')+' Ilce Nufusu',
+      ilceN?ilceN.toLocaleString('tr-TR')+' kisi':'-',dark);
+    y+=20;
+    if(ilN&&ilceN){
+      f(8,false,gray);
+      t('Ilce yogunlugu: %'+Math.round(ilceN/ilN*100)+' (il nufusunun)',mg,y); ln(8);
+    }
+    hLine();
+  }
+
+  // ══ POI ══
   if(parcel.pois&&parcel.pois.length>0){
-    checkPage(24);
-    sectionHeader("YAKIN ÇEVRE ANALİZİ (1.5 km)","📍");
-    // Kategori bazlı grupla
+    checkPage(20);
+    secHeader('YAKIN CEVRE ANALIZI (1.5 km)','[A]');
     const grp={};
     parcel.pois.forEach(poi=>{
-      const k=poi.kategori||"Diğer";
-      if(!grp[k]) grp[k]=[];
+      const k=poi.kategori||'Diger'; if(!grp[k]) grp[k]=[];
       grp[k].push(poi);
     });
-    const katOrder=["Ulaşım","Sağlık","Eğitim","Ticaret","Konaklama","Resmi Kurum","Finans","Yeşil Alan","Dini","Sosyal","Diğer"];
-    katOrder.filter(k=>grp[k]?.length>0).forEach(kat=>{
+    const kats=['Ulasim','Saglik','Egitim','Ticaret','Konaklama','Resmi Kurum','Finans','Yesil Alan','Dini','Sosyal','Diger'];
+    kats.filter(k=>grp[k]?.length>0).forEach(kat=>{
       checkPage(14);
-      font(8,true,C.dark); text(kat,mg,y); 
-      font(8,false,C.muted); text(`(${grp[kat].length})`,mg+25,y);
-      newLine(6);
-      const poiLine=grp[kat].map(p=>p.name+(p.dist?` ${p.dist}m`:"")); 
-      const wrapped=doc.splitTextToSize(poiLine.join("  ·  "),cW-4);
-      font(7,false,C.muted); doc.text(wrapped,mg+2,y); y+=wrapped.length*4+4;
+      f(8,true,dark); t(trFix(kat),mg,y);
+      f(8,false,gray); t('('+grp[kat].length+')',mg+28,y);
+      ln(6);
+      const line=grp[kat].map(p=>trFix(p.name)+(p.dist?' '+p.dist+'m':'')).join('  .  ');
+      const wrapped=doc.splitTextToSize(line,cW-4);
+      f(7,false,gray); doc.text(wrapped,mg+2,y); y+=wrapped.length*4+4;
     });
     hLine();
   }
 
-  // ── Footer ──
-  checkPage(16);
-  setF([248,250,252]); doc.rect(0,H-18,W,18,"F");
-  setD(C.border); doc.line(0,H-18,W,H-18);
-  font(7,false,C.muted); text("Bu rapor ISDBM Digital tarafından otomatik oluşturulmuştur. Tahmini değerler içermekte olup yatırım tavsiyesi niteliği taşımaz.",mg,H-11);
-  font(7,true,C.dark); text("EGBIM | Geliştirici: Ertuğan Genel | Tüm Hakları Saklıdır",mg,H-5);
-  font(7,false,C.muted); text(`${new Date().toLocaleString("tr-TR")}`,W-mg,H-5,{align:"right"});
+  // ══ SON SAYFA FOOTER ══
+  fill(bg); doc.rect(0,H-16,W,16,'F');
+  draw(lightgray); doc.line(0,H-16,W,H-16);
+  f(7,false,gray);
+  t('Bu rapor ISDBM Digital tarafindan otomatik olusturulmustur. Tahmini degerler icerir, yatirim tavsiyesi degildir.',mg,H-9);
+  f(8,true,dark);
+  t('EGBIM | Gelistirici: Ertug an Genel | Tum Haklari Saklidir',mg,H-4);
+  f(7,false,gray); t(new Date().toLocaleString('tr-TR'),W-mg,H-4,{align:'right'});
 
-  doc.save(`ISDBM_${(parcel.projeAdi||parcel.ada||"Rapor").replace(/\s/g,"_")}_${new Date().toISOString().slice(0,10)}.pdf`);
+  doc.save('ISDBM_'+(trFix(parcel.projeAdi||parcel.ada||'Rapor')).replace(/\s/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.pdf');
 }
+
 
 // ── Finansman Hesap Motoru ─────────────────────────────────────────────────
 const FinansmanHesap=({alt,parcel})=>{
@@ -1721,6 +1848,8 @@ const PiyasaAnaliz=({parcel})=>{
 
   // En iyi tahmin: OLS > IDW > Endeksa
   const m2Fiyat=m2Override||(olsTahminSonuc?.tahmin||idwFiyat||endeksaFiyat);
+  // PDF için global'e kaydet
+  if(m2Fiyat) window._lastPiyasaM2=m2Fiyat;
   const tahminKaynagi=m2Override?'Manuel':olsTahminSonuc?`Regresyon (${ilanlar.filter(i=>i.yapiTuru===yapiTuruFilter).length} ilan)`:idwFiyat?'IDW':'Endeksa';
   const parselDeger=Math.round((parcel?.alan||0)*m2Fiyat);
 
@@ -1785,7 +1914,7 @@ const PiyasaAnaliz=({parcel})=>{
   return <div style={{background:'#fff',borderRadius:14,padding:20,border:'1.5px solid #e2e8f0'}}>
     <div style={{fontWeight:700,fontSize:15,marginBottom:2}}>🏘️ Piyasa Değer Analizi</div>
     <div style={{fontSize:11,color:'#64748b',marginBottom:14}}>
-      IDW Mekansal Fiyat Tahmini (Madrid Spatial repo mantığı) + Endeksa 2024 İlçe Endeksi
+      EGBIM Mekansal Fiyat Tahmini + Endeksa 2024 İlçe Endeksi
     </div>
 
     {/* Tabs */}
@@ -2861,7 +2990,17 @@ const App=()=>{
             setSelectedParcel(p);goNav("ai");
           }}>🤖 AI Analiz</button>
           <button className="btn btn-danger" onClick={()=>deleteParcel(p.id)}>🗑️ Sil</button>
-          <button className="btn btn-primary" onClick={()=>generatePDF(p,alts,score)}>📥 PDF İndir</button>
+          <button className="btn btn-primary" onClick={()=>{
+            const cx=alts[0]?.capexDetail;
+            const capexVal=alts[0]?.capexTL||0;
+            const fin=buildFinansmanForPDF(
+              capexVal,30,40,10,12,null,null,null
+            );
+            // Piyasa m2 fiyatı
+            const pm2=window._lastPiyasaM2||null;
+            const pWithPiyasa={...p, piyasaM2:pm2};
+            generatePDF(pWithPiyasa,alts,score,fin);
+          }}>📥 PDF İndir</button>
         </div>
       </div>
       <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
