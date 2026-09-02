@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ISDBM Digital — Kullanım Kılavuzu</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;color:#0f172a;line-height:1.6}
+
+/* NAV */
+.topbar{background:#0f172a;color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+.topbar-brand{font-size:18px;font-weight:800}
+.topbar-brand span{color:#3b82f6}
+.topbar-sub{font-size:12px;color:#94a3b8;margin-left:12px}
+
+/* SIDEBAR NAV */
+.layout{display:flex;min-height:100vh}
+.sidebar{width:260px;background:#fff;border-right:1px solid #e2e8f0;padding:20px 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto;flex-shrink:0}
+.sidebar-section{padding:8px 20px;font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin-top:12px}
+.sidebar a{display:block;padding:8px 20px;font-size:13px;color:#475569;text-decoration:none;border-left:3px solid transparent;transition:all .15s}
+.sidebar a:hover{background:#f8fafc;color:#2563eb;border-left-color:#bfdbfe}
+.sidebar a.active{background:#eff6ff;color:#2563eb;font-weight:600;border-left-color:#2563eb}
+
+/* CONTENT */
+.content{flex:1;padding:32px 40px;max-width:860px}
+@media(max-width:768px){.sidebar{display:none}.content{padding:20px}}
+
+/* SECTIONS */
+.section{margin-bottom:48px;scroll-margin-top:70px}
+.section-header{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #e2e8f0}
+.section-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.section-title{font-size:22px;font-weight:800;color:#0f172a}
+.section-sub{font-size:13px;color:#64748b;margin-top:2px}
+
+h3{font-size:15px;font-weight:700;color:#0f172a;margin:20px 0 8px}
+h4{font-size:13px;font-weight:700;color:#374151;margin:14px 0 6px}
+p{font-size:13px;color:#475569;margin-bottom:10px}
+
+/* CARDS */
+.card{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid #e2e8f0}
+.card-blue{background:#eff6ff;border-color:#bfdbfe}
+.card-green{background:#f0fdf4;border-color:#86efac}
+.card-yellow{background:#fffbeb;border-color:#fbbf24}
+.card-purple{background:#faf5ff;border-color:#d8b4fe}
+.card-red{background:#fff1f2;border-color:#fecdd3}
+
+/* FORMULA */
+.formula{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:16px 20px;margin:12px 0;font-family:monospace;font-size:13px;line-height:1.8}
+.formula .highlight{color:#60a5fa;font-weight:700}
+.formula .result{color:#4ade80;font-weight:700}
+.formula .comment{color:#64748b;font-size:11px}
+
+/* TABLE */
+table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0}
+th{background:#f8fafc;padding:8px 12px;text-align:left;font-weight:600;color:#374151;border-bottom:2px solid #e2e8f0}
+td{padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#475569}
+tr:hover td{background:#fafbfc}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.badge-green{background:#dcfce7;color:#16a34a}
+.badge-blue{background:#dbeafe;color:#2563eb}
+.badge-yellow{background:#fef3c7;color:#d97706}
+.badge-purple{background:#ede9fe;color:#7c3aed}
+
+/* STEP */
+.step{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start}
+.step-num{width:28px;height:28px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;margin-top:2px}
+.step-content{flex:1}
+.step-title{font-weight:700;font-size:14px;color:#0f172a;margin-bottom:4px}
+.step-desc{font-size:13px;color:#475569}
+
+/* METRIC GRID */
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+@media(max-width:600px){.metric-grid{grid-template-columns:1fr}}
+.metric-card{background:#f8fafc;border-radius:10px;padding:14px;border:1px solid #e2e8f0}
+.metric-name{font-weight:700;font-size:13px;margin-bottom:4px}
+.metric-weight{display:inline-block;background:#dbeafe;color:#2563eb;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px}
+.metric-desc{font-size:12px;color:#64748b}
+.metric-example{font-size:11px;color:#94a3b8;margin-top:4px;font-style:italic}
+
+/* EKFE TABLE */
+.ekfe-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12px}
+.ekfe-donem{width:70px;font-weight:600;color:#0f172a}
+.ekfe-bar-wrap{flex:1;background:#e2e8f0;border-radius:3px;height:8px}
+.ekfe-bar{height:8px;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#2563eb)}
+.ekfe-val{width:50px;text-align:right;font-weight:700;color:#2563eb}
+.ekfe-kat{width:50px;text-align:right;color:#16a34a;font-weight:600;font-size:11px}
+
+/* INFO BOX */
+.info-box{display:flex;gap:10px;padding:12px 14px;border-radius:8px;margin:10px 0;font-size:13px}
+.info-box.tip{background:#eff6ff;border-left:3px solid #2563eb;color:#1e40af}
+.info-box.warn{background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e}
+.info-box.note{background:#f0fdf4;border-left:3px solid #22c55e;color:#166534}
+
+/* TOC */
+.toc{background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:32px;border:1px solid #e2e8f0}
+.toc-title{font-weight:700;font-size:15px;margin-bottom:12px;color:#0f172a}
+.toc-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+@media(max-width:600px){.toc-grid{grid-template-columns:1fr}}
+.toc-item{font-size:13px;color:#2563eb;text-decoration:none;padding:3px 0}
+.toc-item:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-brand">ISDBM <span>Digital</span></div>
+    <div style="font-size:11px;color:#94a3b8;margin-top:2px">ARGEPLANO · Kullanım Kılavuzu & Metodoloji</div>
+  </div>
+  <div style="margin-left:auto;font-size:11px;color:#64748b">v1.0 · Eylül 2026</div>
+</div>
+
+<div class="layout">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-section">Başlangıç</div>
+  <a href="#giris">📖 Giriş & Genel Bakış</a>
+  <a href="#akis">🔄 Kullanım Akışı</a>
+
+  <div class="sidebar-section">Temel Hesaplar</div>
+  <a href="#isdbm-skor">📊 ISDBM Skoru</a>
+  <a href="#metrikler">🎯 6 Metrik</a>
+  <a href="#alternatifler">🏗️ Yatırım Alternatifleri</a>
+
+  <div class="sidebar-section">CAPEX Motoru</div>
+  <a href="#capex-formul">📐 CAPEX Formülü</a>
+  <a href="#birim-maliyet">🏗️ Birim Maliyetler</a>
+  <a href="#lokasyon">📍 Lokasyon Katsayıları</a>
+
+  <div class="sidebar-section">Enflasyon</div>
+  <a href="#ekfe">📈 TÜİK EKFE Sistemi</a>
+  <a href="#interpolasyon">🔢 Ekstrapolasyon</a>
+
+  <div class="sidebar-section">Finansman</div>
+  <a href="#finansman">💰 Nakit Akışı Modeli</a>
+  <a href="#projeksiyon">📅 Çok Yıllı Projeksiyon</a>
+  <a href="#proforma">💼 Pro-Forma & MOIC & IRR</a>
+  <a href="#waterfall">🏗️ Equity Waterfall</a>
+
+  <div class="sidebar-section">Veri Kaynakları</div>
+  <a href="#kaynaklar">🗂️ Tüm Kaynaklar</a>
+  <a href="#sinirlar">⚠️ Sınırlılıklar</a>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+<!-- TOC -->
+<div class="toc">
+  <div class="toc-title">📋 İçindekiler</div>
+  <div class="toc-grid">
+    <a class="toc-item" href="#giris">1. Giriş & Genel Bakış</a>
+    <a class="toc-item" href="#akis">2. Kullanım Akışı (5 Adım)</a>
+    <a class="toc-item" href="#isdbm-skor">3. ISDBM Skoru Nasıl Hesaplanır?</a>
+    <a class="toc-item" href="#metrikler">4. 6 Metrik — Ağırlıklar & Kriterler</a>
+    <a class="toc-item" href="#alternatifler">5. Yatırım Alternatifleri Sıralaması</a>
+    <a class="toc-item" href="#capex-formul">6. CAPEX Formülü — 5 Değişken</a>
+    <a class="toc-item" href="#birim-maliyet">7. İnşaat Birim Maliyetleri</a>
+    <a class="toc-item" href="#lokasyon">8. Lokasyon Katsayıları</a>
+    <a class="toc-item" href="#ekfe">9. TÜİK EKFE Enflasyon Sistemi</a>
+    <a class="toc-item" href="#interpolasyon">10. 2026 Ekstrapolasyonu</a>
+    <a class="toc-item" href="#finansman">11. Finansman & Nakit Akışı</a>
+    <a class="toc-item" href="#projeksiyon">12. Çok Yıllı Projeksiyon</a>
+    <a class="toc-item" href="#proforma">13. Pro-Forma — MOIC & IRR</a>
+    <a class="toc-item" href="#waterfall">14. Equity Waterfall</a>
+    <a class="toc-item" href="#kaynaklar">15. Veri Kaynakları</a>
+    <a class="toc-item" href="#sinirlar">16. Sınırlılıklar & Uyarılar</a>
+  </div>
+</div>
+
+<!-- 1. GİRİŞ -->
+<div class="section" id="giris">
+  <div class="section-header">
+    <div class="section-icon" style="background:#eff6ff">📖</div>
+    <div>
+      <div class="section-title">Giriş & Genel Bakış</div>
+      <div class="section-sub">ISDBM Digital nedir, ne yapar?</div>
+    </div>
+  </div>
+
+  <p><strong>ISDBM Digital</strong> (Integrated Site Development & Business Model), ARGEPLANO tarafından geliştirilen bir arsa/parsel yatırım analiz platformudur. Haritadan çizilen parseller için otomatik olarak:</p>
+
+  <div class="metric-grid">
+    <div class="metric-card">
+      <div class="metric-name">📊 ISDBM Skoru</div>
+      <div class="metric-desc">6 metriğin ağırlıklı ortalamasıyla 0–100 arası bütünleşik yatırım potansiyel skoru</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">🏗️ Yatırım Alternatifleri</div>
+      <div class="metric-desc">8 farklı yatırım türü için sıralanmış uygunluk analizi</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">📐 CAPEX Hesabı</div>
+      <div class="metric-desc">Parsel alanı × emsal × birim maliyet × lokasyon katsayısı formülüyle gerçekçi maliyet tahmini</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">💰 Finansman Analizi</div>
+      <div class="metric-desc">Kredi + özkaynak karma finansman, aylık nakit akışı ve çok yıllı projeksiyon</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">🏘️ Piyasa Değeri</div>
+      <div class="metric-desc">Endeksa ilçe endeksi + IDW mekansal interpolasyon ile parsel değer tahmini</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">👥 Nüfus Verisi</div>
+      <div class="metric-desc">TÜİK ADNKS 2023 il ve ilçe nüfus verisi, ilçe yoğunluk analizi</div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. KULLANIM AKIŞI -->
+<div class="section" id="akis">
+  <div class="section-header">
+    <div class="section-icon" style="background:#f0fdf4">🔄</div>
+    <div>
+      <div class="section-title">Kullanım Akışı</div>
+      <div class="section-sub">5 adımda parsel analizinden yatırım kararına</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <div class="step-title">🗺️ Harita & Parsel Çiz</div>
+      <div class="step-desc">Sol menüden "Harita & Çiz" seçin. "✏️ Parsel Çiz" butonuna basın. Haritada parselin köşelerine tıklayarak poligon çizin. "✅ Tamamla" dediğinizde:<br>
+      • Alan otomatik hesaplanır (m²)<br>
+      • Nominatim API'den il/ilçe/mahalle otomatik gelir<br>
+      • Overpass API'den 1.5 km çevre tesis analizi yapılır (POI)</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <div class="step-title">📋 Parsel Bilgilerini Doldurun</div>
+      <div class="step-desc">Açılan formda:<br>
+      • <strong>Ada / Parsel numarası</strong> (TKGM'den kontrol edin)<br>
+      • <strong>Plan Durumu</strong>: Sanayi, Konut, Karma vb.<br>
+      • <strong>Mevcut Kullanım</strong>: Boş Arsa, Tarım vb.<br>
+      • <strong>⚡ Qbiq ile Otomatik Hesapla</strong>: POI verisiyle 6 slider otomatik dolar<br>
+      • Veya sliderları kendiniz ayarlayın (0–100 arası)</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <div class="step-title">💾 Kaydet → Analiz Et</div>
+      <div class="step-desc">"Parseli Kaydet ve Analiz Et" butonuyla parsel LocalStorage'a kaydedilir. JSON dışa aktarma ile yedek alabilirsiniz.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-content">
+      <div class="step-title">🏗️ Yatırım Alternatiflerini İnceleyin</div>
+      <div class="step-desc">Parsel detayında 8 yatırım türü ISDBM skoruna göre sıralanır. Her birinin CAPEX, ROI, IRR, süre bilgisi gösterilir. İstediğinizi seçin.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-content">
+      <div class="step-title">💰 Finansman Modelini Kurun</div>
+      <div class="step-desc">Emsal, birim maliyet, kur, faiz, vade, özkaynak oranını girin. Sistem aylık nakit akışı, ROI, geri dönüş süresi ve çok yıllı projeksiyonu hesaplar.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-content">
+      <div class="step-title">💼 Pro-Forma Analizini İnceleyin</div>
+      <div class="step-desc">"Pro-Forma" sekmesinde:<br>
+      • <strong>MOIC</strong> — paranızın kaç katına çıktığı<br>
+      • <strong>IRR</strong> — gerçek yıllık iç verim oranı<br>
+      • <strong>Equity Waterfall</strong> — sermaye iadesi → tercihli getiri → kâr paylaşımı<br>
+      • <strong>Pro-Forma tablosu</strong> — çıkış değeriyle tam dağıtım tablosu<br>
+      PDF raporu indirin.</div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. ISDBM SKORU -->
+<div class="section" id="isdbm-skor">
+  <div class="section-header">
+    <div class="section-icon" style="background:#faf5ff">📊</div>
+    <div>
+      <div class="section-title">ISDBM Skoru Nasıl Hesaplanır?</div>
+      <div class="section-sub">Bütünleşik yatırım potansiyel skoru</div>
+    </div>
+  </div>
+
+  <div class="formula">
+    <span class="comment">// Ağırlıklı ortalama formülü</span><br>
+    ISDBM = (<span class="highlight">Ulaşım</span> × 0.20) + (<span class="highlight">Demografi</span> × 0.15)<br>
+          + (<span class="highlight">Ticari Potansiyel</span> × 0.20) + (<span class="highlight">Altyapı</span> × 0.20)<br>
+          + (<span class="highlight">Risk</span> × 0.10) + (<span class="highlight">Gelişme Potansiyeli</span> × 0.15)<br><br>
+    <span class="comment">// Örnek: Pendik parseli</span><br>
+    ISDBM = (86×0.20) + (72×0.15) + (81×0.20) + (89×0.20) + (74×0.10) + (91×0.15)<br>
+          = 17.2 + 10.8 + 16.2 + 17.8 + 7.4 + 13.65<br>
+          = <span class="result">83 / 100</span>
+  </div>
+
+  <table>
+    <tr><th>Skor Aralığı</th><th>Değerlendirme</th><th>Anlamı</th></tr>
+    <tr><td><span class="badge badge-green">85–100</span></td><td>Mükemmel Fırsat</td><td>Yüksek öncelikli yatırım bölgesi</td></tr>
+    <tr><td><span class="badge badge-blue">75–84</span></td><td>Güçlü Fırsat</td><td>İyi yatırım potansiyeli</td></tr>
+    <tr><td><span class="badge badge-yellow">60–74</span></td><td>Orta Potansiyel</td><td>Koşullara bağlı değerlendirin</td></tr>
+    <tr><td><span class="badge" style="background:#fee2e2;color:#ef4444">0–59</span></td><td>Düşük Potansiyel</td><td>Dikkatli değerlendirme gerekli</td></tr>
+  </table>
+</div>
+
+<!-- 4. METRİKLER -->
+<div class="section" id="metrikler">
+  <div class="section-header">
+    <div class="section-icon" style="background:#eff6ff">🎯</div>
+    <div>
+      <div class="section-title">6 Metrik — Ağırlıklar & Kriterler</div>
+      <div class="section-sub">Her metrik 0–100 arası puanlanır</div>
+    </div>
+  </div>
+
+  <div class="info-box tip">💡 Slider değerleri 0–100 arası manuel girilebilir. "⚡ Qbiq ile Otomatik Hesapla" butonu Overpass API POI verisiyle otomatik doldurur.</div>
+
+  <table>
+    <tr><th>Metrik</th><th>Ağırlık</th><th>Neye Bakılır?</th><th>Qbiq POI Kaynağı</th></tr>
+    <tr>
+      <td>🚇 <strong>Ulaşım</strong></td>
+      <td><span class="badge badge-blue">%20</span></td>
+      <td>Metro/tren istasyonu, otoyol bağlantısı, liman, havalimanı mesafesi</td>
+      <td>railway=station/halt, motorway_junction sayısı</td>
+    </tr>
+    <tr>
+      <td>👥 <strong>Demografi</strong></td>
+      <td><span class="badge badge-blue">%15</span></td>
+      <td>Nüfus yoğunluğu, büyüme trendi, gelir seviyesi, yaş dağılımı</td>
+      <td>Okul, hastane, eczane yoğunluğu</td>
+    </tr>
+    <tr>
+      <td>📈 <strong>Ticari Potansiyel</strong></td>
+      <td><span class="badge badge-blue">%20</span></td>
+      <td>Bölgedeki ticaret hacmi, sektör uyumu, arz-talep dengesi</td>
+      <td>Süpermarket, AVM, banka sayısı</td>
+    </tr>
+    <tr>
+      <td>⚡ <strong>Altyapı</strong></td>
+      <td><span class="badge badge-blue">%20</span></td>
+      <td>Elektrik kapasitesi, su/doğalgaz bağlantısı, fiber internet, atık su</td>
+      <td>Toplam POI yoğunluğu (gelişmiş altyapı proxy)</td>
+    </tr>
+    <tr>
+      <td>🛡️ <strong>Risk</strong></td>
+      <td><span class="badge badge-yellow">%10</span></td>
+      <td>Deprem riski (AFAD), hukuki durum, imar belirsizliği, pazar riski</td>
+      <td>Bölge hizmet yoğunluğu (yerleşik alan proxy)</td>
+    </tr>
+    <tr>
+      <td>🚀 <strong>Gelişme Potansiyeli</strong></td>
+      <td><span class="badge badge-blue">%15</span></td>
+      <td>Çevre imar planları, OSB/organize bölge yakınlığı, büyüme koridoru</td>
+      <td>Hastane + okul + AVM kombinasyonu</td>
+    </tr>
+  </table>
+
+  <div class="info-box warn">⚠️ Risk metriği düşük ağırlıkta (%10) tutulmuştur çünkü diğer metrikler zaten dolaylı olarak risk bilgisi içerir. Yüksek deprem riski olan bölgeler için AFAD verisi mutlaka kontrol edilmelidir.</div>
+</div>
+
+<!-- 5. YATIRIM ALTERNATİFLERİ -->
+<div class="section" id="alternatifler">
+  <div class="section-header">
+    <div class="section-icon" style="background:#f0fdf4">🏗️</div>
+    <div>
+      <div class="section-title">Yatırım Alternatifleri Sıralaması</div>
+      <div class="section-sub">8 yatırım türü nasıl sıralanıyor?</div>
+    </div>
+  </div>
+
+  <p>Her yatırım türü için <strong>baz ISDBM skoru + tür bonus</strong> hesaplanır:</p>
+
+  <div class="formula">
+    <span class="comment">// Alt skor hesabı</span><br>
+    AltSkor = <span class="highlight">ISDBM_Baz</span> + Σ(<span class="highlight">bonus_katsayı</span> × (metrik_skoru − 50))<br><br>
+    <span class="comment">// Örnek: Data Center, ISDBM=83, Altyapı=89, Ulaşım=86</span><br>
+    DataCenter = 83 + (0.30 × (89−50)) + (0.20 × (86−50))<br>
+               = 83 + 11.7 + 7.2 = <span class="result">101.9 → 100 (max)</span>
+  </div>
+
+  <table>
+    <tr><th>Yatırım Türü</th><th>Bonus Metrikler</th><th>Katsayılar</th><th>İnşaat Sınıfı</th></tr>
+    <tr><td>🏗️ Data Center Campus</td><td>Altyapı, Ulaşım</td><td>+0.30, +0.20</td><td>A++ (×1.0)</td></tr>
+    <tr><td>🚚 Lojistik Merkezi</td><td>Ulaşım, Altyapı</td><td>+0.30, +0.20</td><td>B (×1.0)</td></tr>
+    <tr><td>💻 Teknoloji Kampüsü</td><td>Demografi, Ticari</td><td>+0.25, +0.25</td><td>A (×1.15)</td></tr>
+    <tr><td>🏢 Karma Kullanım</td><td>Demografi, Ticari</td><td>+0.20, +0.20</td><td>A/B (×1.10)</td></tr>
+    <tr><td>🛒 AVM / Ticaret</td><td>Ticari, Demografi</td><td>+0.30, +0.20</td><td>A (×1.20)</td></tr>
+    <tr><td>🏨 Otel / Turizm</td><td>Ulaşım, Demografi</td><td>+0.25, +0.15</td><td>A (×1.30)</td></tr>
+    <tr><td>🏘️ Konut Projesi</td><td>Demografi, Gelişme</td><td>+0.30, +0.20</td><td>B (×1.0)</td></tr>
+    <tr><td>🏭 Endüstriyel Tesis</td><td>Altyapı, Ulaşım</td><td>+0.25, +0.25</td><td>B/C (×0.90)</td></tr>
+  </table>
+
+  <div class="info-box note">✅ Sıralama sadece ISDBM metodolojisine göre yapılır. Gerçek yatırım kararı için imar durumu, tapu bilgisi ve piyasa araştırması mutlaka yapılmalıdır.</div>
+</div>
+
+<!-- 6. CAPEX FORMÜLÜ -->
+<div class="section" id="capex-formul">
+  <div class="section-header">
+    <div class="section-icon" style="background:#fff7ed">📐</div>
+    <div>
+      <div class="section-title">CAPEX Formülü — 5 Değişken</div>
+      <div class="section-sub">İnşaat maliyeti tahmini nasıl hesaplanır?</div>
+    </div>
+  </div>
+
+  <div class="formula">
+    <span class="comment">// CAPEX Ana Formülü</span><br>
+    CAPEX (₺) = <span class="highlight">Alan</span> × <span class="highlight">Emsal</span> × <span class="highlight">BirimMaliyet</span> × <span class="highlight">LokasyonKatsayısı</span> × <span class="highlight">İnşaatSınıfıKatsayısı</span><br><br>
+    <span class="comment">// Örnek: İstanbul / Pendik, 4.957 m², Teknoloji Kampüsü</span><br>
+    CAPEX = 4.957 × <span class="highlight">2.0</span> × <span class="highlight">20.000</span> × <span class="highlight">2.8</span> × <span class="highlight">1.15</span><br>
+          = 4.957 × 2.0 = 9.914 m² (inşaat alanı)<br>
+          = 9.914 × 20.000 = 198.280.000 ₺<br>
+          = 198.280.000 × 2.8 = 555.184.000 ₺<br>
+          = 555.184.000 × 1.15 = <span class="result">638.462.000 ₺ (~638.5M ₺)</span>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric-card">
+      <div class="metric-name">📐 Alan (m²)</div>
+      <div class="metric-desc">Haritadan çizilen poligonun gerçek alanı. Trigonometrik formülle (Shoelace) hesaplanır.</div>
+      <div class="metric-example">Örn: 4.957 m²</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">✏️ Emsal</div>
+      <div class="metric-desc">İmar planındaki yapı yoğunluğu katsayısı. Belediyeden öğrenilir. Kullanıcı manuel girer.</div>
+      <div class="metric-example">Örn: Konut=2.0, Sanayi=0.5-1.0</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">🏗️ Birim Maliyet (₺/m²)</div>
+      <div class="metric-desc">İnşaat türüne göre değişen m² maliyeti. Çevre Bakanlığı 2024 baz fiyatları × EKFE ile 2026'ya getirilmiş.</div>
+      <div class="metric-example">Örn: Data Center=46.000, Konut=16.000</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">📍 Lokasyon Katsayısı</div>
+      <div class="metric-desc">İle göre prim katsayısı. İstanbul en yüksek (2.8×), küçük iller 0.9–1.0×.</div>
+      <div class="metric-example">İstanbul=2.8, Ankara=1.8, İzmir=1.9</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">🏛️ İnşaat Sınıfı Katsayısı</div>
+      <div class="metric-desc">Yapı kalitesine göre çarpan. A++ (Data Center) en yüksek, B/C (Endüstriyel) en düşük.</div>
+      <div class="metric-example">A++=1.0, A=1.15–1.30, B=1.0, B/C=0.9</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-name">💵 USD/TL Kur</div>
+      <div class="metric-desc">CAPEX'in dolar karşılığı için kullanılır. Kullanıcı güncel kuru girer.</div>
+      <div class="metric-example">Örn: 38 ₺/$ → 638M ₺ = 16.8M $</div>
+    </div>
+  </div>
+</div>
+
+<!-- 7. BİRİM MALİYETLER -->
+<div class="section" id="birim-maliyet">
+  <div class="section-header">
+    <div class="section-icon" style="background:#f0fdf4">🏗️</div>
+    <div>
+      <div class="section-title">İnşaat Birim Maliyetleri</div>
+      <div class="section-sub">Çevre Bakanlığı 2024 × EKFE 2026 Q2</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Yatırım Türü</th><th>Baz 2024 Q4 (₺/m²)</th><th>2026 Q2 (×1.319)</th><th>Açıklama</th></tr>
+    <tr><td>🏗️ Data Center</td><td>35.000</td><td><strong>46.000</strong></td><td>Özel elektrik, soğutma, güvenlik altyapısı (A++)</td></tr>
+    <tr><td>🏨 Otel / Turizm</td><td>18.000</td><td><strong>24.000</strong></td><td>4–5 yıldız finish, havuz, spa (A sınıfı)</td></tr>
+    <tr><td>💻 Ofis / Teknoloji</td><td>15.000</td><td><strong>20.000</strong></td><td>Akıllı bina, cam cephe (A sınıfı)</td></tr>
+    <tr><td>🛒 Ticaret / AVM</td><td>14.000</td><td><strong>18.500</strong></td><td>Özel cephe, klima, ortak alanlar (A sınıfı)</td></tr>
+    <tr><td>🏢 Karma Kullanım</td><td>13.000</td><td><strong>17.000</strong></td><td>Konut + ticaret + ofis karması (A/B)</td></tr>
+    <tr><td>🏘️ Konut</td><td>12.000</td><td><strong>16.000</strong></td><td>Standart konut, çevre düzenlemesi (B sınıfı)</td></tr>
+    <tr><td>🏭 Endüstriyel</td><td>9.000</td><td><strong>12.000</strong></td><td>Fonksiyonel, prefabrik seçenek (B/C sınıfı)</td></tr>
+    <tr><td>🚚 Lojistik</td><td>8.000</td><td><strong>10.500</strong></td><td>Çelik konstrüksiyon, yüksek tavan (B sınıfı)</td></tr>
+  </table>
+
+  <div class="info-box tip">💡 Birim maliyetler Parametreler sekmesinden manuel değiştirilebilir. Bölgenizin gerçek inşaat maliyetini biliyorsanız üzerine yazın.</div>
+</div>
+
+<!-- 8. LOKASYON KATSAYILARI -->
+<div class="section" id="lokasyon">
+  <div class="section-header">
+    <div class="section-icon" style="background:#eff6ff">📍</div>
+    <div>
+      <div class="section-title">Lokasyon Katsayıları</div>
+      <div class="section-sub">İle göre arazi ve inşaat prim katsayısı</div>
+    </div>
+  </div>
+
+  <p>Lokasyon katsayısı, aynı büyüklükte ve aynı türde bir yapının farklı illerdeki maliyet farkını yansıtır. İstanbul'da inşaat her anlamda daha pahalıdır — arsa değeri, işçilik, malzeme lojistiği.</p>
+
+  <table>
+    <tr><th>İl</th><th>Katsayı</th><th>İl</th><th>Katsayı</th></tr>
+    <tr><td>🏙️ İstanbul</td><td><strong>2.8×</strong></td><td>Sakarya</td><td>1.2×</td></tr>
+    <tr><td>Muğla (Bodrum)</td><td><strong>1.8×</strong></td><td>Balıkesir</td><td>1.2×</td></tr>
+    <tr><td>İzmir</td><td>1.9×</td><td>Konya</td><td>1.1×</td></tr>
+    <tr><td>Ankara</td><td>1.8×</td><td>Mersin</td><td>1.2×</td></tr>
+    <tr><td>Antalya</td><td>1.6×</td><td>Adana</td><td>1.1×</td></tr>
+    <tr><td>Tekirdağ</td><td>1.5×</td><td>Gaziantep</td><td>1.2×</td></tr>
+    <tr><td>Kocaeli</td><td>1.5×</td><td>Şanlıurfa</td><td>0.9×</td></tr>
+    <tr><td>Bursa</td><td>1.4×</td><td>Diğer iller</td><td>1.0×</td></tr>
+  </table>
+</div>
+
+<!-- 9. EKFE -->
+<div class="section" id="ekfe">
+  <div class="section-header">
+    <div class="section-icon" style="background:#fff7ed">📈</div>
+    <div>
+      <div class="section-title">TÜİK EKFE Enflasyon Sistemi</div>
+      <div class="section-sub">Konut fiyatları nasıl güncelleniyor?</div>
+    </div>
+  </div>
+
+  <p><strong>EKFE</strong> (Endekslenmiş Konut Fiyat Endeksi), TÜİK'in her çeyrek yayınladığı konut fiyat değişim verisidir. ISDBM bu veriyi kullanarak 2024 Q4 baz fiyatlarını 2026 Q2'ye ekstrapolasyon yapar.</p>
+
+  <h3>Yıllık Değişim Oranları</h3>
+  <div class="card">
+    <div class="ekfe-row"><span class="ekfe-donem">2022</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:100%"></div></div><span class="ekfe-val">%188.4</span><span class="ekfe-kat">Rekor</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2023</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:45%"></div></div><span class="ekfe-val">%84.9</span><span class="ekfe-kat">Yüksek</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2024 Q1</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:34%"></div></div><span class="ekfe-val">%63.2</span><span class="ekfe-kat">↘ Düşüş</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2024 Q2</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:26%"></div></div><span class="ekfe-val">%48.7</span><span class="ekfe-kat">↘</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2024 Q3</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:20%"></div></div><span class="ekfe-val">%38.4</span><span class="ekfe-kat">↘</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2024 Q4</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:17%"></div></div><span class="ekfe-val">%31.2</span><span class="ekfe-kat">BAZ</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2025 Q1</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:15%;background:#94a3b8"></div></div><span class="ekfe-val">%28.5</span><span class="ekfe-kat" style="color:#94a3b8">Tahmin</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2025 Q2</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:13%;background:#94a3b8"></div></div><span class="ekfe-val">%24.0</span><span class="ekfe-kat" style="color:#94a3b8">Tahmin</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2025 Q3</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:11%;background:#94a3b8"></div></div><span class="ekfe-val">%20.5</span><span class="ekfe-kat" style="color:#94a3b8">Tahmin</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2025 Q4</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:10%;background:#94a3b8"></div></div><span class="ekfe-val">%18.0</span><span class="ekfe-kat" style="color:#94a3b8">Tahmin</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2026 Q1</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:9%;background:#94a3b8"></div></div><span class="ekfe-val">%16.0</span><span class="ekfe-kat" style="color:#94a3b8">Tahmin</span></div>
+    <div class="ekfe-row"><span class="ekfe-donem">2026 Q2</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:8%;background:#94a3b8"></div></div><span class="ekfe-val">%15.0</span><span class="ekfe-kat" style="color:#94a3b8">Hedef</span></div>
+  </div>
+  <div style="font-size:11px;color:#94a3b8;margin-top:4px">Gri çubuklar: TCMB beklentileri + piyasa konsensüsü tahmini</div>
+</div>
+
+<!-- 10. EKSTRAPOLASYON -->
+<div class="section" id="interpolasyon">
+  <div class="section-header">
+    <div class="section-icon" style="background:#f0fdf4">🔢</div>
+    <div>
+      <div class="section-title">2026 Ekstrapolasyonu</div>
+      <div class="section-sub">2024 Q4 baz fiyatı → 2026 Q2 nasıl hesaplanır?</div>
+    </div>
+  </div>
+
+  <div class="formula">
+    <span class="comment">// Çeyreklik artış = yıllık artışın dörtte biri (bileşik)</span><br>
+    çeyreklik = (1 + yıllık/100)^(1/4) − 1<br><br>
+    <span class="comment">// 6 çeyrek kümülatif katsayı (2025 Q1 → 2026 Q2)</span><br>
+    K = (1+%6.47) × (1+%5.53) × (1+%4.77) × (1+%4.22) × (1+%3.78) × (1+%3.56)<br>
+    K = <span class="result">1.319</span>  →  <span class="highlight">%31.9 kümülatif artış</span><br><br>
+    <span class="comment">// Örnek uygulama</span><br>
+    Pendik 2024 Q4: 42.000 ₺/m²<br>
+    Pendik 2026 Q2: 42.000 × 1.319 = <span class="result">55.398 ₺/m²</span>
+  </div>
+
+  <table>
+    <tr><th>İlçe</th><th>2024 Q4 ₺/m²</th><th>2026 Q2 ₺/m²</th><th>Artış</th></tr>
+    <tr><td>Beşiktaş</td><td>92.000</td><td><strong>121.348</strong></td><td>+%31.9</td></tr>
+    <tr><td>Sarıyer</td><td>78.000</td><td><strong>102.882</strong></td><td>+%31.9</td></tr>
+    <tr><td>Kadıköy</td><td>74.000</td><td><strong>97.606</strong></td><td>+%31.9</td></tr>
+    <tr><td>Beylikdüzü</td><td>46.000</td><td><strong>60.674</strong></td><td>+%31.9</td></tr>
+    <tr><td>Pendik</td><td>42.000</td><td><strong>55.398</strong></td><td>+%31.9</td></tr>
+    <tr><td>Çankaya (Ankara)</td><td>32.000</td><td><strong>42.208</strong></td><td>+%31.9</td></tr>
+  </table>
+
+  <div class="info-box warn">⚠️ 2025–2026 tahminleri TCMB enflasyon beklentileri ve piyasa konsensüsüne dayanır. Gerçek EKFE değerleri farklı çıkabilir. Piyasa Analizi panelinden dönem seçip gerçek fiyatı manuel override edebilirsiniz.</div>
+</div>
+
+<!-- 11. FİNANSMAN -->
+<div class="section" id="finansman">
+  <div class="section-header">
+    <div class="section-icon" style="background:#faf5ff">💰</div>
+    <div>
+      <div class="section-title">Finansman & Nakit Akışı Modeli</div>
+      <div class="section-sub">AssetRevitalization + Pro-Forma Investment Engine</div>
+    </div>
+  </div>
+
+  <h3>Aylık Taksit Hesabı (Eşit Taksit Yöntemi)</h3>
+  <div class="formula">
+    <span class="comment">// Annüite formülü</span><br>
+    Taksit = Kredi × [r × (1+r)^n] / [(1+r)^n − 1]<br><br>
+    <span class="comment">// r = aylık faiz, n = toplam ay</span><br>
+    r = yıllık_faiz / 12 / 100<br>
+    n = vade_yıl × 12<br><br>
+    <span class="comment">// Örnek: 200M ₺ kredi, %40 yıllık, 10 yıl</span><br>
+    r = 0.40/12 = 0.0333<br>
+    n = 10×12 = 120 ay<br>
+    Taksit = 200M × [0.0333 × (1.0333)^120] / [(1.0333)^120 − 1]<br>
+           = <span class="result">≈ 6.8M ₺/ay</span>
+  </div>
+
+  <h3>Aylık Net Nakit Akışı</h3>
+  <div class="formula">
+    Net = <span class="highlight">Aylık Getiri</span> − <span class="highlight">Aylık Taksit</span><br><br>
+    Aylık Getiri = CAPEX × Yıllık_Getiri_Oranı / 12<br><br>
+    <span class="comment">// Net pozitifse → kredi getiriyle ödeniyor (AssetRevitalization prensibi)</span><br>
+    <span class="comment">// Net negatifse → özkaynak desteği gerekiyor</span>
+  </div>
+
+  <h3>Özkaynak ROI</h3>
+  <div class="formula">
+    Özkaynak_ROI = (Yıllık_Getiri − Yıllık_Taksit) / Özkaynak_Tutarı × 100<br><br>
+    <span class="comment">// Kaldıraç etkisi: %30 özkaynak ile daha yüksek ROI mümkün</span><br>
+    <span class="comment">// Ama faiz yükü de yüksek — optimal nokta projeye göre değişir</span>
+  </div>
+
+  <table>
+    <tr><th>Parametre</th><th>Açıklama</th><th>Önerilen Aralık</th></tr>
+    <tr><td>Emsal</td><td>İmar planı yapı yoğunluğu</td><td>Belediyeden teyit edin</td></tr>
+    <tr><td>Birim Maliyet</td><td>₺/m² inşaat maliyeti</td><td>Piyasa fiyatıyla karşılaştırın</td></tr>
+    <tr><td>Yıllık Kredi Faizi</td><td>TL bazlı banka kredi faizi</td><td>%35–55 (2026 piyasa)</td></tr>
+    <tr><td>Özkaynak Oranı</td><td>Toplam CAPEX'in özkaynak payı</td><td>%20–50 (proje türüne göre)</td></tr>
+    <tr><td>Kredi Vadesi</td><td>Geri ödeme süresi</td><td>5–20 yıl</td></tr>
+    <tr><td>Yıllık Getiri Oranı</td><td>Kira/gelir / CAPEX</td><td>ISDBM ROI önerisini baz alın</td></tr>
+  </table>
+</div>
+
+<!-- 12. PROJEKSİYON -->
+<div class="section" id="projeksiyon">
+  <div class="section-header">
+    <div class="section-icon" style="background:#f0fdf4">📅</div>
+    <div>
+      <div class="section-title">Çok Yıllı Projeksiyon</div>
+      <div class="section-sub">Vade + 5 yıl sonrası gösterimi</div>
+    </div>
+  </div>
+
+  <p>Projeksiyon tablosu, kredi vadesi + 5 yıl sonrasına kadar her yıl için nakit akışını gösterir (min 10, max 35 yıl).</p>
+
+  <table>
+    <tr><th>Sütun</th><th>Formül</th><th>Anlamı</th></tr>
+    <tr><td>Yıllık Getiri</td><td>CAPEX × ROI%</td><td>O yıl beklenen toplam gelir</td></tr>
+    <tr><td>Taksit</td><td>Aylık taksit × 12</td><td>Kredi bitmeden "—" değil, devam eder</td></tr>
+    <tr><td>Yıllık Net</td><td>Getiri − Taksit</td><td>O yıl cebe giren net tutar</td></tr>
+    <tr><td>Kümülatif Net</td><td>Σ(Yıllık Net)</td><td>Başlangıçtan o yıla toplam net</td></tr>
+  </table>
+
+  <div class="info-box note">✅ Kümülatif Net pozitife geçtiğinde yatırım kendini amorti etmiş demektir. Kredi bittikten sonraki yıllarda taksit "—" olur, getirinin tamamı net kara dönüşür.</div>
+</div>
+
+<!-- 13. PRO-FORMA -->
+<div class="section" id="proforma">
+  <div class="section-header">
+    <div class="section-icon" style="background:#faf5ff">💼</div>
+    <div>
+      <div class="section-title">Pro-Forma Analizi — MOIC, IRR, Net Kâr</div>
+      <div class="section-sub">pro-forma-investment-engine repo mantığı uyarlaması</div>
+    </div>
+  </div>
+
+  <p>Pro-Forma sekmesi, gayrimenkul yatırımının toplam getirisini çıkış değeriyle birlikte modelleyen profesyonel analiz aracıdır.</p>
+
+  <h3>MOIC — Equity Multiple (Para Kaç Katına Çıktı?)</h3>
+  <div class="formula">
+    <span class="comment">// MOIC = Money-on-Investment-Capital</span><br>
+    MOIC = <span class="highlight">Toplam Dağıtım</span> / <span class="highlight">Özkaynak Yatırımı</span><br><br>
+    <span class="comment">// Toplam Dağıtım = Kümülatif Nakit Akışı + Çıkış Değeri</span><br>
+    Çıkış Değeri = CAPEX × (1 + Getiri% × Yıl × 0.30)<br><br>
+    <span class="comment">// Örnek: 125M ₺ özkaynak, 19 yıl, %35 getiri</span><br>
+    Yıllık Net = her yıl +29.3M ₺<br>
+    Çıkış Değeri = 418.7M × (1 + 0.35×19×0.30) = ~1.25B ₺<br>
+    Toplam = (29.3M×19) + 1.25B = ~1.81B ₺<br>
+    MOIC = 1.81B / 125M = <span class="result">14.5x</span>
+  </div>
+
+  <table>
+    <tr><th>MOIC Aralığı</th><th>Değerlendirme</th><th>Tipik Senaryo</th></tr>
+    <tr><td><span class="badge badge-green">> 3.0x</span></td><td>Mükemmel</td><td>Uzun vade, yüksek büyüme bölgesi</td></tr>
+    <tr><td><span class="badge badge-blue">2.0–3.0x</span></td><td>Güçlü</td><td>Standart gayrimenkul yatırımı</td></tr>
+    <tr><td><span class="badge badge-yellow">1.5–2.0x</span></td><td>Kabul edilebilir</td><td>Düşük riskli, istikrarlı getiri</td></tr>
+    <tr><td><span class="badge" style="background:#fee2e2;color:#ef4444">< 1.5x</span></td><td>Zayıf</td><td>Yüksek faiz yükü veya düşük getiri</td></tr>
+  </table>
+
+  <h3>IRR — İç Verim Oranı (Gerçek Yıllık Getiri)</h3>
+  <div class="formula">
+    <span class="comment">// IRR: NPV = 0 yapan iskonto oranı</span><br>
+    0 = −Özkaynak + Σ[ Nakit_Akış(t) / (1+IRR)^t ]<br><br>
+    <span class="comment">// Newton-Raphson iteratif çözümü</span><br>
+    IRR(n+1) = IRR(n) − NPV(IRR(n)) / NPV'(IRR(n))<br><br>
+    <span class="comment">// Nakit akışları dizisi:</span><br>
+    t=0: <span class="highlight">−125M ₺</span>  (özkaynak yatırımı)<br>
+    t=1..18: <span class="highlight">+29.3M ₺</span>  (yıllık net, taksit düşülmüş)<br>
+    t=19: <span class="highlight">+29.3M ₺ + 1.25B ₺</span>  (son yıl + çıkış)<br>
+    → <span class="result">IRR ≈ %28.5/yıl</span>
+  </div>
+
+  <div class="info-box tip">💡 IRR ile banka faizini karşılaştırın. IRR > kredi faizi ise kaldıraç avantajlıdır. IRR < kredi faizi ise borç almak dezavantajlı.</div>
+
+  <table>
+    <tr><th>IRR Aralığı</th><th>Değerlendirme</th><th>2026 Türkiye bağlamı</th></tr>
+    <tr><td><span class="badge badge-green">> %30</span></td><td>Olağanüstü</td><td>Nadir, yüksek risk içerir</td></tr>
+    <tr><td><span class="badge badge-green">%20–30</span></td><td>Güçlü yatırım</td><td>Enflasyonu geçiyor</td></tr>
+    <tr><td><span class="badge badge-blue">%10–20</span></td><td>Kabul edilebilir</td><td>Enflasyona yakın</td></tr>
+    <tr><td><span class="badge badge-yellow">< %10</span></td><td>Zayıf</td><td>Mevduat faizinin altında kalabilir</td></tr>
+  </table>
+
+  <h3>Net Kâr & Break-Even</h3>
+  <div class="formula">
+    Net Kâr = <span class="highlight">Toplam Dağıtım</span> − <span class="highlight">Özkaynak Yatırımı</span><br><br>
+    Break-Even Yılı = Kümülatif Net ilk kez ≥ 0 olan yıl<br><br>
+    <span class="comment">// Kümülatif Net = Σ(Yıllık Getiri) − Σ(Yıllık Taksit)</span><br>
+    <span class="comment">// Pozitife geçince yatırım kendini amorti etmiş demektir</span>
+  </div>
+</div>
+
+<!-- 14. WATERFALL -->
+<div class="section" id="waterfall">
+  <div class="section-header">
+    <div class="section-icon" style="background:#eff6ff">🏗️</div>
+    <div>
+      <div class="section-title">Equity Waterfall Dağıtımı</div>
+      <div class="section-sub">Getiriler nasıl bölüştürülür?</div>
+    </div>
+  </div>
+
+  <p>Equity Waterfall, bir gayrimenkul yatırımından elde edilen getirilerin yatırımcı ve sponsor arasında öncelik sırasına göre dağıtılma modelidir. ISDBM üç katmanlı basit waterfall uygular:</p>
+
+  <div style="display:flex;flex-direction:column;gap:12px;margin:16px 0">
+    <div class="card card-blue">
+      <h4 style="color:#1d4ed8">🔵 1. Katman — Sermaye İadesi</h4>
+      <p>Yatırılan özkaynak öncelikle geri ödenir. Hiçbir kâr paylaşımı bu aşama tamamlanmadan gerçekleşmez.</p>
+      <div class="formula" style="font-size:12px">Hedef = Özkaynak Tutarı (örn: 125M ₺)</div>
+    </div>
+    <div class="card card-green">
+      <h4 style="color:#166534">🟢 2. Katman — Tercihli Getiri</h4>
+      <p>Sermaye iade edildikten sonra yatırımcıya %8 yıllık tercihli getiri ödenir. Bu oran genellikle sözleşmede belirlenir.</p>
+      <div class="formula" style="font-size:12px">Hedef = Özkaynak × %8 × Vade Yılı<br>
+      Örnek: 125M × 0.08 × 10 = <span class="result">100M ₺</span></div>
+    </div>
+    <div class="card card-purple">
+      <h4 style="color:#6d28d9">🟣 3. Katman — Kâr Paylaşımı</h4>
+      <p>Kalan kâr yatırımcı ile sponsor (geliştirici) arasında paylaşılır. Oran anlaşmaya göre değişir (tipik: 70/30 veya 80/20).</p>
+      <div class="formula" style="font-size:12px">Kalan = Net Kâr − Tercihli Getiri<br>
+      Örnek: 255M − 100M = <span class="result">155M ₺ paylaşılır</span></div>
+    </div>
+  </div>
+
+  <div class="info-box warn">⚠️ ISDBM'deki waterfall modeli basitleştirilmiştir. Gerçek gayrimenkul anlaşmalarında catch-up mekanizmaları, kâr eşiği (promote) ve çoklu tier yapıları olabilir. Hukuki danışman ile anlaşma yapısı mutlaka gözden geçirilmelidir.</div>
+
+  <h3>Pro-Forma Tablosu Sütun Açıklamaları</h3>
+  <table>
+    <tr><th>Sütun</th><th>Formül</th><th>Anlamı</th></tr>
+    <tr><td>Yıllık Getiri</td><td>CAPEX × Getiri%</td><td>Kira/işletme geliri tahmini</td></tr>
+    <tr><td>Taksit</td><td>Aylık taksit × 12</td><td>Banka kredi ödemesi (vade bitince —)</td></tr>
+    <tr><td>Yıllık Net</td><td>Getiri − Taksit</td><td>O yıl gerçek cep geliri</td></tr>
+    <tr><td>Kümülatif Net</td><td>Σ(Yıllık Net)</td><td>Başlangıçtan toplam birikim</td></tr>
+    <tr><td>Çıkış Değeri</td><td>CAPEX × büyüme katsayısı</td><td>Son yılda mülk satış değeri tahmini</td></tr>
+    <tr><td>Toplam Dağıtım</td><td>Getiri + Çıkış (son yıl)</td><td>O yıl toplam nakit girişi</td></tr>
+    <tr><td>TOPLAM satırı</td><td>Tüm yılların toplamı</td><td>Yatırım döneminin özeti</td></tr>
+  </table>
+
+  <div class="info-box note">✅ Son satır (🏁) çıkış yılıdır. Bu yılda hem yıllık getiri hem çıkış (satış) geliri birlikte gösterilir. MOIC ve IRR bu yıldaki değerlere göre hesaplanır.</div>
+</div>
+
+<!-- 15. KAYNAKLAR -->
+<div class="section" id="kaynaklar">
+  <div class="section-header">
+    <div class="section-icon" style="background:#f8fafc">🗂️</div>
+    <div>
+      <div class="section-title">15. Tüm Veri Kaynakları</div>
+      <div class="section-sub">Nereden geliyor?</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Veri</th><th>Kaynak</th><th>Güncelleme</th><th>Erişim</th></tr>
+    <tr><td>Harita / Adres arama</td><td>OpenStreetMap Nominatim</td><td>Sürekli</td><td>Ücretsiz API</td></tr>
+    <tr><td>Uydu görüntüsü</td><td>Esri World Imagery</td><td>Periyodik</td><td>Ücretsiz CDN</td></tr>
+    <tr><td>Topografik harita</td><td>OpenTopoMap</td><td>Sürekli</td><td>Ücretsiz API</td></tr>
+    <tr><td>Yakın çevre (POI)</td><td>OpenStreetMap Overpass API</td><td>Anlık</td><td>Ücretsiz API</td></tr>
+    <tr><td>İl / İlçe nüfusu</td><td>TÜİK ADNKS 2023</td><td>Yıllık</td><td>Statik JSON</td></tr>
+    <tr><td>İlçe m² fiyatları</td><td>Endeksa Konut Fiyat Endeksi Q4 2024</td><td>Çeyreklik</td><td>Statik JSON</td></tr>
+    <tr><td>Enflasyon katsayıları</td><td>TÜİK EKFE + TCMB beklentileri</td><td>Çeyreklik</td><td>Statik formül</td></tr>
+    <tr><td>İnşaat birim maliyetleri</td><td>Çevre Bakanlığı 2024 × EKFE</td><td>Yıllık</td><td>Statik JSON</td></tr>
+    <tr><td>Mekansal fiyat tahmini (IDW)</td><td>Airbnb Madrid Spatial repo mantığı</td><td>Kullanıcı verisi</td><td>Hesaplama</td></tr>
+    <tr><td>Metrik otomatik hesap</td><td>Qbiq proximity band metodolojisi</td><td>POI verisi ile</td><td>Hesaplama</td></tr>
+    <tr><td>Finansman modeli</td><td>AssetRevitalization repo metodolojisi</td><td>—</td><td>Hesaplama</td></tr>
+    <tr><td>MOIC / IRR / Waterfall</td><td>Pro-Forma Investment Engine repo</td><td>—</td><td>Newton-Raphson hesaplama</td></tr>
+    <tr><td>Parsel depolama</td><td>Browser LocalStorage + JSON export</td><td>Anlık</td><td>Lokal</td></tr>
+  </table>
+</div>
+
+<!-- 16. SINIRLILIKLAR -->
+<div class="section" id="sinirlar">
+  <div class="section-header">
+    <div class="section-icon" style="background:#fff1f2">⚠️</div>
+    <div>
+      <div class="section-title">Sınırlılıklar & Uyarılar</div>
+      <div class="section-sub">Dikkat edilmesi gerekenler</div>
+    </div>
+  </div>
+
+  <div class="card card-red">
+    <h3 style="color:#dc2626">⛔ Bu sistem yatırım tavsiyesi değildir</h3>
+    <p>ISDBM Digital, ön değerlendirme ve karar destek aracıdır. Nihai yatırım kararları için: lisanslı gayrimenkul değerleme uzmanı, hukuk danışmanı, vergi uzmanı ve banka fizibilite çalışması zorunludur.</p>
+  </div>
+
+  <div class="card card-yellow">
+    <h3>📋 Bilinen Sınırlılıklar</h3>
+    <table>
+      <tr><th>Konu</th><th>Mevcut Durum</th><th>Öneri</th></tr>
+      <tr><td>TKGM Parsel Verisi</td><td>Manuel giriş gerekiyor</td><td>TKGM e-Devlet üzerinden teyit edin</td></tr>
+      <tr><td>İmar Durumu</td><td>Manuel seçim</td><td>Belediyeden imar durumu belgesi alın</td></tr>
+      <tr><td>Gerçek Zamanlı İlan</td><td>API kısıtı — manuel giriş</td><td>Sahibinden/Hepsiemlak'tan kontrol edin</td></tr>
+      <tr><td>Mahalle Nüfusu</td><td>OSM'de yok, gösterilmiyor</td><td>TÜİK il/ilçe verisi kullanılıyor</td></tr>
+      <tr><td>2025–2026 EKFE</td><td>Tahmin (gerçek değil)</td><td>TÜİK güncel bültenini kontrol edin</td></tr>
+      <tr><td>Deprem Riski</td><td>Proxy hesap (doğrudan değil)</td><td>AFAD deprem tehlike haritasını inceleyin</td></tr>
+      <tr><td>Tarım/Orman Arazisi</td><td>Yatırım alternatifleri geçersiz</td><td>İmar değişikliği olmadan kullanılamaz</td></tr>
+    </table>
+  </div>
+
+  <div class="card card-green">
+    <h3>✅ Doğru Kullanım İçin</h3>
+    <p>1. Slider değerlerini gerçekçi doldurun — hepsini 90+ yapmak skoru şişirir, karar hatalı olur.</p>
+    <p>2. Emsal değerini mutlaka belediyeden teyit edin — CAPEX doğrudan buna bağlı.</p>
+    <p>3. Getiri oranını piyasa verileriyle karşılaştırın — ISDBM ROI önerisi genel rehberdir.</p>
+    <p>4. Referans ilanları Sahibinden/Hepsiemlak'tan girerek IDW tahminini güçlendirin.</p>
+    <p>5. JSON dışa aktarma ile verilerinizi düzenli yedekleyin.</p>
+  </div>
+
+  <div style="margin-top:32px;padding:20px;background:#0f172a;border-radius:12px;color:#94a3b8;font-size:12px;text-align:center">
+    <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:6px">ISDBM Digital · ARGEPLANO</div>
+    Kılavuz v1.1 · Eylül 2026 — Pro-Forma, MOIC, IRR, Waterfall eklendi · Tüm hesaplar tahmini değer içerir, yatırım tavsiyesi değildir.
+  </div>
+</div>
+
+</div><!-- /content -->
+</div><!-- /layout -->
+
+<script>
+// Active sidebar link on scroll
+const sections = document.querySelectorAll('.section');
+const links = document.querySelectorAll('.sidebar a');
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if(e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`.sidebar a[href="#${e.target.id}"]`);
+      if(active) active.classList.add('active');
+    }
+  });
+}, {threshold: 0.3});
+
+sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>
