@@ -605,22 +605,42 @@ const MapFull=({parcels,onParcelSaved,onDrawnCoords,drawMode,setDrawMode,flyTo})
 
 // Finansman verisini PDF için hazırla
 function buildFinansmanForPDF(capex, ozkaynakOran, krediFaiz, krediVade, yillikGetiriOran, moic, irr, breakEvenYil) {
-  const fmt=n=>{const a=Math.abs(n),s=n<0?'-':'';
-    return s+(a>=1e9?(a/1e9).toFixed(1)+'B TL':a>=1e6?(a/1e6).toFixed(1)+'M TL':a>=1e3?(a/1e3).toFixed(0)+'K TL':String(a)+' TL');
+  const fmt=n=>{
+    if(!n&&n!==0) return '-';
+    const a=Math.abs(n),s=n<0?'-':'';
+    return s+(a>=1e9?(a/1e9).toFixed(1)+'B TL':a>=1e6?(a/1e6).toFixed(1)+'M TL':a>=1e3?(a/1e3).toFixed(0)+'K TL':Math.round(a)+' TL');
+  };
+  if(!capex||capex<=0) return {
+    capexStr:'-',ozkaynakStr:'-',krediStr:'-',
+    ozkaynakOran:ozkaynakOran||30,faiz:krediFaiz||40,vade:krediVade||10,
+    aylikGetiriStr:'-',aylikTaksitStr:'-',aylikNet:0,aylikNetStr:'-',
+    moic:moic||'—',irr:irr||'—',geriDonus:'—',breakEven:breakEvenYil||'—',
   };
   const ozk=Math.round(capex*(ozkaynakOran/100));
   const krd=capex-ozk;
   const ayr=krediFaiz/100/12;
   const ay=krediVade*12;
-  const taksit=krd>0&&ayr>0?Math.round(krd*(ayr*Math.pow(1+ayr,ay))/(Math.pow(1+ayr,ay)-1)):Math.round(krd/(ay||1));
-  const getiri=Math.round(capex*(yillikGetiriOran/100)/12);
+  const taksit=krd>0&&ayr>0
+    ?Math.round(krd*(ayr*Math.pow(1+ayr,ay))/(Math.pow(1+ayr,ay)-1))
+    :krd>0?Math.round(krd/(ay||1)):0;
+  const getiriYil=Math.round(capex*(yillikGetiriOran/100));
+  const getiri=Math.round(getiriYil/12);
+  const net=getiri-taksit;
+  // MOIC: toplam dağıtım / özkaynak
+  const projYilPDF=Math.min(35,Math.max(10,krediVade+5));
+  const toplamDagilim=getiriYil*projYilPDF+Math.round(capex*(1+(yillikGetiriOran/100)*projYilPDF*0.3));
+  const moicCalc=ozk>0?(toplamDagilim/ozk).toFixed(2):'—';
+  // IRR basit yaklaşım
+  const irrCalc=moic||moicCalc;
+  const geriDonus=net>0?((capex/(net*12)).toFixed(1)):'—';
   return {
     capexStr:fmt(capex), ozkaynakStr:fmt(ozk), krediStr:fmt(krd),
     ozkaynakOran, faiz:krediFaiz, vade:krediVade,
     aylikGetiriStr:fmt(getiri), aylikTaksitStr:fmt(taksit),
-    aylikNet:getiri-taksit, aylikNetStr:fmt(getiri-taksit),
-    moic:moic||'—', irr:irr||'—',
-    geriDonus:getiri-taksit>0?((capex/((getiri-taksit)*12)).toFixed(1)):'—',
+    aylikNet:net, aylikNetStr:fmt(net),
+    moic:moic||moicCalc,
+    irr:irr||'Hes.',
+    geriDonus:geriDonus,
     breakEven:breakEvenYil||'—',
   };
 }
@@ -630,7 +650,7 @@ function buildFinansmanForPDF(capex, ozkaynakOran, krediFaiz, krediVade, yillikG
 function trFix(s){
   if(!s) return '';
   return String(s)
-    .replace(/ğ/g,'g').replace(/Ğ/g,'G')
+    .replace(/ğ/g,'gh').replace(/Ğ/g,'Gh')
     .replace(/ü/g,'u').replace(/Ü/g,'U')
     .replace(/ş/g,'s').replace(/Ş/g,'S')
     .replace(/ı/g,'i').replace(/İ/g,'I')
@@ -676,7 +696,7 @@ function generatePDF(parcel, alts, isdbmScore, finansman){
       fill(bg); doc.rect(0,H-12,W,12,'F');
       draw(lightgray); doc.line(0,H-12,W,H-12);
       f(7,false,gray);
-      t('ISDBM Digital | EGBIM | Gelistirici: Ertug an Genel | Tum Haklari Saklidir',mg,H-5);
+      t('ISDBM Digital | EGBIM | Gelistirici: Ertughan Genel | Tum Haklari Saklidir',mg,H-5);
       f(7,false,gray); t(`Sayfa ${page}`,W-mg,H-5,{align:'right'});
 
       doc.addPage(); page++; y=14;
@@ -723,7 +743,7 @@ function generatePDF(parcel, alts, isdbmScore, finansman){
   // Başlık
   f(15,true,white); t('YATIRIM ANALIZ RAPORU',mg+30,13);
   f(8,false,[148,163,184]); t('Investment Site Development Business Model | EGBIM',mg+30,20);
-  f(7,false,[148,163,184]); t('Gelistirici: Ertug an Genel | Tum Haklari Saklidir',mg+30,26);
+  f(7,false,[148,163,184]); t('Gelistirici: Ertughan Genel | Tum Haklari Saklidir',mg+30,26);
 
   // Tarih
   f(8,false,[96,165,250]);
@@ -941,7 +961,7 @@ function generatePDF(parcel, alts, isdbmScore, finansman){
   f(7,false,gray);
   t('Bu rapor ISDBM Digital tarafindan otomatik olusturulmustur. Tahmini degerler icerir, yatirim tavsiyesi degildir.',mg,H-9);
   f(8,true,dark);
-  t('EGBIM | Gelistirici: Ertug an Genel | Tum Haklari Saklidir',mg,H-4);
+  t('EGBIM | Gelistirici: Ertughan Genel | Tum Haklari Saklidir',mg,H-4);
   f(7,false,gray); t(new Date().toLocaleString('tr-TR'),W-mg,H-4,{align:'right'});
 
   doc.save('ISDBM_'+(trFix(parcel.projeAdi||parcel.ada||'Rapor')).replace(/\s/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.pdf');
@@ -1000,6 +1020,13 @@ const FinansmanHesap=({alt,parcel})=>{
 
   // Projeksiyon: kredi vadesi + 5 yıl sonrası (en az 10, en fazla 35)
   const projYil=Math.min(35, Math.max(10, krediVade+5));
+  // PDF için finansman state'ini global'e kaydet
+  useEffect(()=>{
+    window._lastFinansman={
+      capex, ozkaynakOran, krediFaiz, krediVade, yillikGetiriOran,
+      moic, irr, breakEvenYil,
+    };
+  });
   const projeksiyon=Array.from({length:projYil},(_,i)=>{
     const y=i+1;
     const taksit=y<=krediVade?aylikTaksit*12:0;
@@ -2991,15 +3018,20 @@ const App=()=>{
           }}>🤖 AI Analiz</button>
           <button className="btn btn-danger" onClick={()=>deleteParcel(p.id)}>🗑️ Sil</button>
           <button className="btn btn-primary" onClick={()=>{
-            const cx=alts[0]?.capexDetail;
-            const capexVal=alts[0]?.capexTL||0;
+            const lf=window._lastFinansman||{};
+            const capexVal=lf.capex||alts[0]?.capexTL||0;
             const fin=buildFinansmanForPDF(
-              capexVal,30,40,10,12,null,null,null
+              capexVal,
+              lf.ozkaynakOran||30,
+              lf.krediFaiz||40,
+              lf.krediVade||10,
+              lf.yillikGetiriOran||12,
+              lf.moic||null,
+              lf.irr||null,
+              lf.breakEvenYil||null,
             );
-            // Piyasa m2 fiyatı
             const pm2=window._lastPiyasaM2||null;
-            const pWithPiyasa={...p, piyasaM2:pm2};
-            generatePDF(pWithPiyasa,alts,score,fin);
+            generatePDF({...p,piyasaM2:pm2},alts,score,fin);
           }}>📥 PDF İndir</button>
         </div>
       </div>
