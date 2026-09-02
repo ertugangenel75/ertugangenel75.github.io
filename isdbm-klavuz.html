@@ -134,14 +134,14 @@ tr:hover td{background:#fafbfc}
   <a href="#interpolasyon">🔢 Ekstrapolasyon</a>
 
   <div class="sidebar-section">Finansman</div>
-  <a href="#finansman">💰 Nakit Akışı Modeli</a>
-  <a href="#projeksiyon">📅 Çok Yıllı Projeksiyon</a>
-  <a href="#proforma">💼 Pro-Forma & MOIC & IRR</a>
+  <a href="#finansman">💰 Finansman Hesabı</a>
+  <a href="#projeksiyon">📅 Yıllık Projeksiyon</a>
+  <a href="#proforma">💼 Pro-Forma Analizi</a>
   <a href="#waterfall">🏗️ Equity Waterfall</a>
 
   <div class="sidebar-section">Piyasa & Regresyon</div>
   <a href="#piyasa">🏘️ Piyasa Değer Analizi</a>
-  <a href="#ols">🧮 OLS Regresyon Motoru</a>
+  <a href="#ols">🧮 Piyasa Fiyat Tahmini</a>
   <a href="#ulasim">🚇 Ulaşım Hiyerarşisi</a>
 
   <div class="sidebar-section">Veri Kaynakları</div>
@@ -167,11 +167,11 @@ tr:hover td{background:#fafbfc}
     <a class="toc-item" href="#ekfe">9. TÜİK EKFE Enflasyon Sistemi</a>
     <a class="toc-item" href="#interpolasyon">10. 2026 Ekstrapolasyonu</a>
     <a class="toc-item" href="#finansman">11. Finansman & Nakit Akışı</a>
-    <a class="toc-item" href="#projeksiyon">12. Çok Yıllı Projeksiyon</a>
+    <a class="toc-item" href="#projeksiyon">12. Yıllık Projeksiyon</a>
     <a class="toc-item" href="#proforma">13. Pro-Forma — MOIC & IRR</a>
     <a class="toc-item" href="#waterfall">14. Equity Waterfall</a>
     <a class="toc-item" href="#piyasa">15. Piyasa Değer Analizi</a>
-    <a class="toc-item" href="#ols">16. OLS Regresyon Motoru</a>
+    <a class="toc-item" href="#ols">16. Piyasa Fiyat Tahmini</a>
     <a class="toc-item" href="#ulasim">17. Ulaşım Hiyerarşisi</a>
     <a class="toc-item" href="#kaynaklar">18. Veri Kaynakları</a>
     <a class="toc-item" href="#sinirlar">19. Sınırlılıklar & Uyarılar</a>
@@ -320,21 +320,12 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#faf5ff">📊</div>
     <div>
-      <div class="section-title">ISDBM Skoru Nasıl Hesaplanır?</div>
-      <div class="section-sub">Bütünleşik yatırım potansiyel skoru</div>
+      <div class="section-title">ISDBM Skoru</div>
+      <div class="section-sub">0–100 arası bütünleşik yatırım potansiyel skoru</div>
     </div>
   </div>
 
-  <div class="formula">
-    <span class="comment">// Ağırlıklı ortalama formülü</span><br>
-    ISDBM = (<span class="highlight">Ulaşım</span> × 0.20) + (<span class="highlight">Demografi</span> × 0.15)<br>
-          + (<span class="highlight">Ticari Potansiyel</span> × 0.20) + (<span class="highlight">Altyapı</span> × 0.20)<br>
-          + (<span class="highlight">Risk</span> × 0.10) + (<span class="highlight">Gelişme Potansiyeli</span> × 0.15)<br><br>
-    <span class="comment">// Örnek: Pendik parseli</span><br>
-    ISDBM = (86×0.20) + (72×0.15) + (81×0.20) + (89×0.20) + (74×0.10) + (91×0.15)<br>
-          = 17.2 + 10.8 + 16.2 + 17.8 + 7.4 + 13.65<br>
-          = <span class="result">83 / 100</span>
-  </div>
+  
 
   <table>
     <tr><th>Skor Aralığı</th><th>Değerlendirme</th><th>Anlamı</th></tr>
@@ -350,8 +341,8 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#eff6ff">🎯</div>
     <div>
-      <div class="section-title">6 Metrik — Ağırlıklar & Kriterler</div>
-      <div class="section-sub">Her metrik 0–100 arası puanlanır</div>
+      <div class="section-title">6 Metrik</div>
+      <div class="section-sub">Her kriter 0–100 arası değerlendirilir</div>
     </div>
   </div>
 
@@ -405,20 +396,14 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#f0fdf4">🏗️</div>
     <div>
-      <div class="section-title">Yatırım Alternatifleri Sıralaması</div>
-      <div class="section-sub">8 yatırım türü nasıl sıralanıyor?</div>
+      <div class="section-title">Yatırım Alternatifleri</div>
+      <div class="section-sub">Hangi yatırım türü bu parsele uygun?</div>
     </div>
   </div>
 
-  <p>Her yatırım türü için <strong>baz ISDBM skoru + tür bonus</strong> hesaplanır:</p>
+  <p>Her yatırım türü için parselin ISDBM skoru baz alınır. Ulaşım, demografi veya ticari potansiyel gibi o türe özel metrikler yüksekse sıralama yükselir. Örneğin Data Center için altyapı ve ulaşım kritik, konut için demografi ve gelişme potansiyeli öne çıkar.</p>
 
-  <div class="formula">
-    <span class="comment">// Alt skor hesabı</span><br>
-    AltSkor = <span class="highlight">ISDBM_Baz</span> + Σ(<span class="highlight">bonus_katsayı</span> × (metrik_skoru − 50))<br><br>
-    <span class="comment">// Örnek: Data Center, ISDBM=83, Altyapı=89, Ulaşım=86</span><br>
-    DataCenter = 83 + (0.30 × (89−50)) + (0.20 × (86−50))<br>
-               = 83 + 11.7 + 7.2 = <span class="result">101.9 → 100 (max)</span>
-  </div>
+  
 
   <table>
     <tr><th>Yatırım Türü</th><th>Bonus Metrikler</th><th>Katsayılar</th><th>İnşaat Sınıfı</th></tr>
@@ -440,21 +425,12 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#fff7ed">📐</div>
     <div>
-      <div class="section-title">CAPEX Formülü — 5 Değişken</div>
-      <div class="section-sub">İnşaat maliyeti tahmini nasıl hesaplanır?</div>
+      <div class="section-title">Maliyet Tahmini (CAPEX)</div>
+      <div class="section-sub">Beş faktörden oluşan maliyet tahmini</div>
     </div>
   </div>
 
-  <div class="formula">
-    <span class="comment">// CAPEX Ana Formülü</span><br>
-    CAPEX (₺) = <span class="highlight">Alan</span> × <span class="highlight">Emsal</span> × <span class="highlight">BirimMaliyet</span> × <span class="highlight">LokasyonKatsayısı</span> × <span class="highlight">İnşaatSınıfıKatsayısı</span><br><br>
-    <span class="comment">// Örnek: İstanbul / Pendik, 4.957 m², Teknoloji Kampüsü</span><br>
-    CAPEX = 4.957 × <span class="highlight">2.0</span> × <span class="highlight">20.000</span> × <span class="highlight">2.8</span> × <span class="highlight">1.15</span><br>
-          = 4.957 × 2.0 = 9.914 m² (inşaat alanı)<br>
-          = 9.914 × 20.000 = 198.280.000 ₺<br>
-          = 198.280.000 × 2.8 = 555.184.000 ₺<br>
-          = 555.184.000 × 1.15 = <span class="result">638.462.000 ₺ (~638.5M ₺)</span>
-  </div>
+  
 
   <div class="metric-grid">
     <div class="metric-card">
@@ -495,8 +471,8 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#f0fdf4">🏗️</div>
     <div>
-      <div class="section-title">İnşaat Birim Maliyetleri</div>
-      <div class="section-sub">Çevre Bakanlığı 2024 × EKFE 2026 Q2</div>
+      <div class="section-title">Yapı Türlerine Göre Maliyetler</div>
+      <div class="section-sub">Türkiye geneli yapı türü maliyet tablosu</div>
     </div>
   </div>
 
@@ -521,7 +497,7 @@ tr:hover td{background:#fafbfc}
     <div class="section-icon" style="background:#eff6ff">📍</div>
     <div>
       <div class="section-title">Lokasyon Katsayıları</div>
-      <div class="section-sub">İle göre arazi ve inşaat prim katsayısı</div>
+      <div class="section-sub">Şehre göre maliyet farkı</div>
     </div>
   </div>
 
@@ -545,14 +521,14 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#fff7ed">📈</div>
     <div>
-      <div class="section-title">TÜİK EKFE Enflasyon Sistemi</div>
-      <div class="section-sub">Konut fiyatları nasıl güncelleniyor?</div>
+      <div class="section-title">Fiyat Güncelleme Sistemi</div>
+      <div class="section-sub">Eski fiyatlar nasıl güncelleniyor?</div>
     </div>
   </div>
 
   <p><strong>EKFE</strong> (Endekslenmiş Konut Fiyat Endeksi), TÜİK'in her çeyrek yayınladığı konut fiyat değişim verisidir. ISDBM bu veriyi kullanarak 2024 Q4 baz fiyatlarını 2026 Q2'ye ekstrapolasyon yapar.</p>
 
-  <h3>Yıllık Değişim Oranları</h3>
+  
   <div class="card">
     <div class="ekfe-row"><span class="ekfe-donem">2022</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:100%"></div></div><span class="ekfe-val">%188.4</span><span class="ekfe-kat">Rekor</span></div>
     <div class="ekfe-row"><span class="ekfe-donem">2023</span><div class="ekfe-bar-wrap"><div class="ekfe-bar" style="width:45%"></div></div><span class="ekfe-val">%84.9</span><span class="ekfe-kat">Yüksek</span></div>
@@ -575,21 +551,12 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#f0fdf4">🔢</div>
     <div>
-      <div class="section-title">2026 Ekstrapolasyonu</div>
-      <div class="section-sub">2024 Q4 baz fiyatı → 2026 Q2 nasıl hesaplanır?</div>
+      <div class="section-title">Güncel Fiyata Nasıl Getirilir?</div>
+      <div class="section-sub">Hangi yıla kadar güncel?</div>
     </div>
   </div>
 
-  <div class="formula">
-    <span class="comment">// Çeyreklik artış = yıllık artışın dörtte biri (bileşik)</span><br>
-    çeyreklik = (1 + yıllık/100)^(1/4) − 1<br><br>
-    <span class="comment">// 6 çeyrek kümülatif katsayı (2025 Q1 → 2026 Q2)</span><br>
-    K = (1+%6.47) × (1+%5.53) × (1+%4.77) × (1+%4.22) × (1+%3.78) × (1+%3.56)<br>
-    K = <span class="result">1.319</span>  →  <span class="highlight">%31.9 kümülatif artış</span><br><br>
-    <span class="comment">// Örnek uygulama</span><br>
-    Pendik 2024 Q4: 42.000 ₺/m²<br>
-    Pendik 2026 Q2: 42.000 × 1.319 = <span class="result">55.398 ₺/m²</span>
-  </div>
+  
 
   <table>
     <tr><th>İlçe</th><th>2024 Q4 ₺/m²</th><th>2026 Q2 ₺/m²</th><th>Artış</th></tr>
@@ -609,39 +576,19 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#faf5ff">💰</div>
     <div>
-      <div class="section-title">Finansman & Nakit Akışı Modeli</div>
-      <div class="section-sub">AssetRevitalization + Pro-Forma Investment Engine</div>
+      <div class="section-title">Finansman Hesabı</div>
+      <div class="section-sub">Kredi ve özkaynak karma analizi</div>
     </div>
   </div>
 
-  <h3>Aylık Taksit Hesabı (Eşit Taksit Yöntemi)</h3>
-  <div class="formula">
-    <span class="comment">// Annüite formülü</span><br>
-    Taksit = Kredi × [r × (1+r)^n] / [(1+r)^n − 1]<br><br>
-    <span class="comment">// r = aylık faiz, n = toplam ay</span><br>
-    r = yıllık_faiz / 12 / 100<br>
-    n = vade_yıl × 12<br><br>
-    <span class="comment">// Örnek: 200M ₺ kredi, %40 yıllık, 10 yıl</span><br>
-    r = 0.40/12 = 0.0333<br>
-    n = 10×12 = 120 ay<br>
-    Taksit = 200M × [0.0333 × (1.0333)^120] / [(1.0333)^120 − 1]<br>
-           = <span class="result">≈ 6.8M ₺/ay</span>
-  </div>
+  
+  
 
-  <h3>Aylık Net Nakit Akışı</h3>
-  <div class="formula">
-    Net = <span class="highlight">Aylık Getiri</span> − <span class="highlight">Aylık Taksit</span><br><br>
-    Aylık Getiri = CAPEX × Yıllık_Getiri_Oranı / 12<br><br>
-    <span class="comment">// Net pozitifse → kredi getiriyle ödeniyor (AssetRevitalization prensibi)</span><br>
-    <span class="comment">// Net negatifse → özkaynak desteği gerekiyor</span>
-  </div>
+  
+  
 
-  <h3>Özkaynak ROI</h3>
-  <div class="formula">
-    Özkaynak_ROI = (Yıllık_Getiri − Yıllık_Taksit) / Özkaynak_Tutarı × 100<br><br>
-    <span class="comment">// Kaldıraç etkisi: %30 özkaynak ile daha yüksek ROI mümkün</span><br>
-    <span class="comment">// Ama faiz yükü de yüksek — optimal nokta projeye göre değişir</span>
-  </div>
+  
+  
 
   <table>
     <tr><th>Parametre</th><th>Açıklama</th><th>Önerilen Aralık</th></tr>
@@ -660,7 +607,7 @@ tr:hover td{background:#fafbfc}
     <div class="section-icon" style="background:#f0fdf4">📅</div>
     <div>
       <div class="section-title">Çok Yıllı Projeksiyon</div>
-      <div class="section-sub">Vade + 5 yıl sonrası gösterimi</div>
+      <div class="section-sub">Yıllara göre gelir-gider tablosu</div>
     </div>
   </div>
 
@@ -682,25 +629,15 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#faf5ff">💼</div>
     <div>
-      <div class="section-title">Pro-Forma Analizi — MOIC, IRR, Net Kâr</div>
-      <div class="section-sub">pro-forma-investment-engine repo mantığı uyarlaması</div>
+      <div class="section-title">Pro-Forma Analizi</div>
+      <div class="section-sub">Toplam getiri ve kârlılık analizi</div>
     </div>
   </div>
 
-  <p>Pro-Forma sekmesi, gayrimenkul yatırımının toplam getirisini çıkış değeriyle birlikte modelleyen profesyonel analiz aracıdır.</p>
+  <p>Pro-Forma sekmesi, yatırımın tüm ömrü boyunca ne kazandırdığını hesaplar. Sadece aylık gelir değil, yatırımın sonunda mülk satışından elde edilecek değeri de dahil ederek gerçek toplam getiriyi gösterir.</p>
 
-  <h3>MOIC — Equity Multiple (Para Kaç Katına Çıktı?)</h3>
-  <div class="formula">
-    <span class="comment">// MOIC = Money-on-Investment-Capital</span><br>
-    MOIC = <span class="highlight">Toplam Dağıtım</span> / <span class="highlight">Özkaynak Yatırımı</span><br><br>
-    <span class="comment">// Toplam Dağıtım = Kümülatif Nakit Akışı + Çıkış Değeri</span><br>
-    Çıkış Değeri = CAPEX × (1 + Getiri% × Yıl × 0.30)<br><br>
-    <span class="comment">// Örnek: 125M ₺ özkaynak, 19 yıl, %35 getiri</span><br>
-    Yıllık Net = her yıl +29.3M ₺<br>
-    Çıkış Değeri = 418.7M × (1 + 0.35×19×0.30) = ~1.25B ₺<br>
-    Toplam = (29.3M×19) + 1.25B = ~1.81B ₺<br>
-    MOIC = 1.81B / 125M = <span class="result">14.5x</span>
-  </div>
+  
+  
 
   <table>
     <tr><th>MOIC Aralığı</th><th>Değerlendirme</th><th>Tipik Senaryo</th></tr>
@@ -710,18 +647,8 @@ tr:hover td{background:#fafbfc}
     <tr><td><span class="badge" style="background:#fee2e2;color:#ef4444">< 1.5x</span></td><td>Zayıf</td><td>Yüksek faiz yükü veya düşük getiri</td></tr>
   </table>
 
-  <h3>IRR — İç Verim Oranı (Gerçek Yıllık Getiri)</h3>
-  <div class="formula">
-    <span class="comment">// IRR: NPV = 0 yapan iskonto oranı</span><br>
-    0 = −Özkaynak + Σ[ Nakit_Akış(t) / (1+IRR)^t ]<br><br>
-    <span class="comment">// Newton-Raphson iteratif çözümü</span><br>
-    IRR(n+1) = IRR(n) − NPV(IRR(n)) / NPV'(IRR(n))<br><br>
-    <span class="comment">// Nakit akışları dizisi:</span><br>
-    t=0: <span class="highlight">−125M ₺</span>  (özkaynak yatırımı)<br>
-    t=1..18: <span class="highlight">+29.3M ₺</span>  (yıllık net, taksit düşülmüş)<br>
-    t=19: <span class="highlight">+29.3M ₺ + 1.25B ₺</span>  (son yıl + çıkış)<br>
-    → <span class="result">IRR ≈ %28.5/yıl</span>
-  </div>
+  
+  
 
   <div class="info-box tip">💡 IRR ile banka faizini karşılaştırın. IRR > kredi faizi ise kaldıraç avantajlıdır. IRR < kredi faizi ise borç almak dezavantajlı.</div>
 
@@ -733,13 +660,8 @@ tr:hover td{background:#fafbfc}
     <tr><td><span class="badge badge-yellow">< %10</span></td><td>Zayıf</td><td>Mevduat faizinin altında kalabilir</td></tr>
   </table>
 
-  <h3>Net Kâr & Break-Even</h3>
-  <div class="formula">
-    Net Kâr = <span class="highlight">Toplam Dağıtım</span> − <span class="highlight">Özkaynak Yatırımı</span><br><br>
-    Break-Even Yılı = Kümülatif Net ilk kez ≥ 0 olan yıl<br><br>
-    <span class="comment">// Kümülatif Net = Σ(Yıllık Getiri) − Σ(Yıllık Taksit)</span><br>
-    <span class="comment">// Pozitife geçince yatırım kendini amorti etmiş demektir</span>
-  </div>
+  
+  
 </div>
 
 <!-- 14. WATERFALL -->
@@ -797,7 +719,7 @@ tr:hover td{background:#fafbfc}
     <div class="section-icon" style="background:#f0fdf4">🏘️</div>
     <div>
       <div class="section-title">Piyasa Değer Analizi</div>
-      <div class="section-sub">Endeksa + IDW + OLS Regresyon — 3 katmanlı tahmin sistemi</div>
+      <div class="section-sub">Çevre ilanlardan fiyat tahmini</div>
     </div>
   </div>
 
@@ -806,28 +728,22 @@ tr:hover td{background:#fafbfc}
   <div style="display:flex;flex-direction:column;gap:10px;margin:16px 0">
     <div class="card card-blue">
       <h4 style="color:#1d4ed8">📍 Katman 1 — Endeksa İlçe Endeksi (her zaman aktif)</h4>
-      <p>Endeksa Q4 2024 ilçe ortalama m² fiyatı × TÜİK EKFE katsayısı. 60+ ilçe kapsıyor. Dönem dropdown ile 2024 Q4 – 2026 Q2 arası seçilebilir. Gerçek fiyatı biliyorsanız override edebilirsiniz.</p>
+      
     </div>
     <div class="card card-green">
       <h4 style="color:#166534">🔬 Katman 2 — IDW Mekansal Interpolasyon (2+ ilan)</h4>
-      <p>Kullanıcının girdiği referans ilanların koordinatlarından, parsele mesafeyle ters orantılı ağırlıkla fiyat tahmini yapılır. Airbnb Madrid Spatial repo metodolojisi.</p>
+      <p>Kullanıcının girdiği referans ilanların koordinatlarından, parsele mesafeyle ters orantılı ağırlıkla fiyat tahmini yapılır. EGBIM mekansal analiz motoru tarafından hesaplanır.</p>
     </div>
     <div class="card card-purple">
       <h4 style="color:#6d28d9">🧮 Katman 3 — OLS Regresyon (5+ ilan)</h4>
-      <p>En güçlü tahmin. Her faktörün (metro mesafesi, oda sayısı, bina yaşı…) fiyata katkısı β katsayısıyla ölçülür. R², RMSE ve güven aralığı hesaplanır.</p>
+      
     </div>
   </div>
 
-  <h3>Tahmin Hiyerarşisi</h3>
-  <div class="formula">
-    <span class="comment">// Aktif tahmin: en güçlü mevcut veri kullanılır</span><br>
-    <span class="highlight">5+ ilan</span> → OLS Regresyon  (R², RMSE, katsayılar)<br>
-    <span class="highlight">2-4 ilan</span> → IDW Interpolasyon (mesafe ağırlıklı)<br>
-    <span class="highlight">0-1 ilan</span> → Endeksa Endeksi (ilçe ortalaması)<br>
-    <span class="highlight">Manuel</span>  → Override (kullanıcı kendi değerini girer)
-  </div>
+  
+  
 
-  <h3>Referans İlan Formu — Yeni Alanlar</h3>
+  <h3>İlan Formunda Doldurulan Bilgiler</h3>
   <table>
     <tr><th>Alan</th><th>Açıklama</th><th>OLS Değişkeni</th></tr>
     <tr><td>Yapı Türü</td><td>Konut/Ofis/Karma/AVM — model seçimi</td><td>Model ayırıcı</td></tr>
@@ -848,14 +764,14 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#faf5ff">🧮</div>
     <div>
-      <div class="section-title">OLS Regresyon Motoru</div>
-      <div class="section-sub">PySAL/geosnap mantığı — saf JavaScript implementasyonu</div>
+      <div class="section-title">Piyasa Fiyat Tahmini</div>
+      <div class="section-sub">İlanlar arttıkça tahmin güçlenir</div>
     </div>
   </div>
 
-  <p>PySAL kütüphanesinin mekansal regresyon metodolojisi tarayıcıda çalışacak şekilde JavaScript'e uyarlandı. Python veya sunucu gerektirmez.</p>
+  <p>Referans ilanlar girildiğinde sistem, hangi faktörlerin fiyatı ne yönde etkilediğini otomatik öğrenir. Metro yakınlığı, oda sayısı, bina yaşı, otopark gibi her değişkenin m² fiyatına katkısı ayrı ayrı hesaplanır. Python veya sunucu gerektirmez — tamamen tarayıcıda çalışır.</p>
 
-  <h3>Yapı Türüne Göre Değişken Setleri</h3>
+  <h3>Yapı Türüne Göre Değişkenler</h3>
   <table>
     <tr><th>Yapı Türü</th><th>Değişkenler</th></tr>
     <tr><td>🏘️ Konut</td><td>m², oda, kat, binaYaşı, <strong>metroMesafe</strong>, okulSayısı, parkVar, otopark, anaYolCephe, ilçeEndeks</td></tr>
@@ -864,25 +780,11 @@ tr:hover td{background:#fafbfc}
     <tr><td>🛒 AVM</td><td>m², <strong>otoyolMesafe, nüfusYoğunluk, anaYolCephe</strong>, otopark, metroMesafe, ilçeEndeks</td></tr>
   </table>
 
-  <h3>Matematiksel Formül</h3>
-  <div class="formula">
-    <span class="comment">// OLS: Ordinary Least Squares</span><br>
-    β = (X<sup>T</sup>X)<sup>-1</sup> X<sup>T</sup>y<br><br>
-    <span class="comment">// X: normalize edilmiş bağımsız değişkenler matrisi (0-1)</span><br>
-    <span class="comment">// y: m² fiyatları vektörü</span><br>
-    <span class="comment">// β: katsayılar vektörü</span><br><br>
-    <span class="comment">// Matris tersi: Gaussian elimination</span><br>
-    <span class="comment">// Normalize: (x - min) / (max - min)</span>
-  </div>
+  
+  
 
-  <h3>Model Kalite Metrikleri</h3>
-  <div class="formula">
-    R² = 1 − SS_res / SS_tot<br>
-    <span class="comment">// SS_res = Σ(y − ŷ)²  SS_tot = Σ(y − ȳ)²</span><br><br>
-    RMSE = √(SS_res / n)<br>
-    <span class="comment">// ₺/m² cinsinden ortalama tahmin hatası</span><br><br>
-    Güven aralığı = tahmin ± RMSE × 1.5
-  </div>
+  
+  
 
   <table>
     <tr><th>R² Aralığı</th><th>Güvenilirlik</th><th>Anlamı</th></tr>
@@ -912,7 +814,7 @@ tr:hover td{background:#fafbfc}
     <div class="section-icon" style="background:#eff6ff">🚇</div>
     <div>
       <div class="section-title">Ulaşım Hiyerarşisi</div>
-      <div class="section-sub">Metro her yerde yok — hiyerarşik ulaşım skoru</div>
+      <div class="section-sub">Ulaşım türüne göre değerlendirme</div>
     </div>
   </div>
 
@@ -929,7 +831,7 @@ tr:hover td{background:#fafbfc}
     </div>
   </div>
 
-  <h3>Overpass API Ulaşım Sorgusu</h3>
+  <h3>Ulaşım Türleri ve Ağırlıkları</h3>
   <table>
     <tr><th>OSM Tag</th><th>Tür</th><th>Konut Ağırlığı</th><th>Ofis/AVM Ağırlığı</th></tr>
     <tr><td>railway=station/halt</td><td>Metro, Marmaray, Banliyö</td><td>⭐⭐⭐</td><td>⭐⭐⭐</td></tr>
@@ -942,10 +844,10 @@ tr:hover td{background:#fafbfc}
 
   <div class="info-box tip">💡 Metro ve otobüs terminali aynı değildir. Metro sabit hat, güvenilir, değer artışına doğrudan katkısı var. Otobüs terminali gürültü ve trafik getirdiği için konut için bazen negatif etkili bile olabilir.</div>
 
-  <h3>Metro Olmayan Şehirlerde</h3>
+  <h3>Metro Olmayan Şehirlerde Ne Olur?</h3>
   <p>Metro yoksa <code>metroMesafe = null</code> olarak kaydedilir — "0 metre" değil. Regresyon modeli bu değişkeni dışarıda bırakır. Küçük şehirlerde otobüs durağı ve otoyol erişimi ön plana çıkar, bu da gerçeği yansıtır.</p>
 
-  <h3>Sorgu Yarıçapı</h3>
+  <h3>Arama Mesafesi</h3>
   <table>
     <tr><th>Tesis Türü</th><th>Yarıçap</th><th>Gerekçe</th></tr>
     <tr><td>Metro, tramvay, vapur</td><td>500m</td><td>Yürüme mesafesi</td></tr>
@@ -960,7 +862,7 @@ tr:hover td{background:#fafbfc}
   <div class="section-header">
     <div class="section-icon" style="background:#f8fafc">🗂️</div>
     <div>
-      <div class="section-title">15. Tüm Veri Kaynakları</div>
+      <div class="section-title">Veri Kaynakları</div>
       <div class="section-sub">Nereden geliyor?</div>
     </div>
   </div>
@@ -975,11 +877,11 @@ tr:hover td{background:#fafbfc}
     <tr><td>İlçe m² fiyatları</td><td>Endeksa Konut Fiyat Endeksi Q4 2024</td><td>Çeyreklik</td><td>Statik JSON</td></tr>
     <tr><td>Enflasyon katsayıları</td><td>TÜİK EKFE + TCMB beklentileri</td><td>Çeyreklik</td><td>Statik formül</td></tr>
     <tr><td>İnşaat birim maliyetleri</td><td>Çevre Bakanlığı 2024 × EKFE</td><td>Yıllık</td><td>Statik JSON</td></tr>
-    <tr><td>Mekansal fiyat tahmini (IDW)</td><td>Airbnb Madrid Spatial repo mantığı</td><td>Kullanıcı verisi</td><td>Hesaplama</td></tr>
+    <tr><td>Mekansal fiyat tahmini (IDW)</td><td>EGBIM — Mekansal interpolasyon motoru</td><td>Kullanıcı verisi</td><td>Dahili hesaplama</td></tr>
     <tr><td>Metrik otomatik hesap</td><td>Qbiq proximity band metodolojisi</td><td>POI verisi ile</td><td>Hesaplama</td></tr>
-    <tr><td>Finansman modeli</td><td>AssetRevitalization repo metodolojisi</td><td>—</td><td>Hesaplama</td></tr>
-    <tr><td>MOIC / IRR / Waterfall</td><td>Pro-Forma Investment Engine repo</td><td>—</td><td>Newton-Raphson hesaplama</td></tr>
-    <tr><td>OLS Regresyon</td><td>PySAL/geosnap workshop-pysal-wrsa26 mantığı</td><td>İlan bazlı</td><td>Gaussian elimination, saf JS</td></tr>
+    <tr><td>Finansman modeli</td><td>EGBIM — Karma finansman analiz motoru</td><td>—</td><td>Dahili hesaplama</td></tr>
+    <tr><td>MOIC / IRR / Waterfall</td><td>EGBIM — Pro-Forma yatırım analiz motoru</td><td>—</td><td>Dahili hesaplama</td></tr>
+    <tr><td>Piyasa fiyat tahmini</td><td>EGBIM — Mekansal regresyon motoru</td><td>İlan bazlı</td><td>Dahili hesaplama</td></tr>
     <tr><td>Ulaşım değişkenleri</td><td>Overpass API (koordinat bazlı, anlık)</td><td>Anlık</td><td>500m–2km yarıçap sorgusu</td></tr>
     <tr><td>Parsel depolama</td><td>Browser LocalStorage + JSON export</td><td>Anlık</td><td>Lokal</td></tr>
   </table>
@@ -1025,9 +927,20 @@ tr:hover td{background:#fafbfc}
 
   <div style="margin-top:32px;padding:20px;background:#0f172a;border-radius:12px;color:#94a3b8;font-size:12px;text-align:center">
     <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:6px">ISDBM Digital · ARGEPLANO</div>
-    Kılavuz v1.2 · Eylül 2026 — OLS Regresyon, Piyasa Analizi, Ulaşım Hiyerarşisi eklendi · Tüm hesaplar tahmini değer içerir, yatırım tavsiyesi değildir.
+     · Tüm hesaplar tahmini değer içerir, yatırım tavsiyesi değildir.
   </div>
 </div>
+
+  <div style="margin-top:32px;padding:28px 24px;background:#0f172a;border-radius:12px;color:#94a3b8;text-align:center">
+    <div style="font-size:22px;margin-bottom:12px">🏗️</div>
+    <div style="color:#fff;font-weight:800;font-size:18px;margin-bottom:4px;letter-spacing:.5px">ISDBM Digital</div>
+    <div style="color:#3b82f6;font-weight:600;font-size:13px;margin-bottom:16px;letter-spacing:1px">EGBIM tarafından yapılmıştır</div>
+    <div style="border-top:1px solid #1e293b;padding-top:16px;display:flex;flex-direction:column;gap:6px">
+      <div style="color:#e2e8f0;font-weight:700;font-size:14px">Geliştirici: ERTUĞAN GENEL</div>
+      <div style="color:#64748b;font-size:12px">Tüm hakları saklıdır · All Rights Reserved</div>
+      <div style="color:#64748b;font-size:11px;margin-top:4px">Kılavuz v1.2 · Eylül 2026</div>
+    </div>
+  </div>
 
 </div><!-- /content -->
 </div><!-- /layout -->
