@@ -44,7 +44,7 @@ isdbm-klavuz.html       Metodoloji ve kullanım kılavuzu
 | Harita | Leaflet.js + OpenStreetMap |
 | Adres arama | Nominatim API |
 | Yakın çevre | Overpass API (OSM) |
-| Mekansal interpolasyon | IDW (Airbnb Madrid repo mantığı) |
+| Mekansal interpolasyon | IDW 
 | Regresyon | OLS — Gaussian elimination, saf JS |
 | Fiyat endeksi | Endeksa Q4 2024 × TÜİK EKFE ekstrapolasyon |
 | Nüfus verisi | TÜİK ADNKS 2023 |
@@ -100,10 +100,10 @@ IRR  = NPV=0 yapan oran (Newton-Raphson)
 | İlçe m² fiyatları | Endeksa Q4 2024 | Çeyreklik |
 | Enflasyon katsayısı | TÜİK EKFE + TCMB tahmini | Çeyreklik |
 | İnşaat birim maliyetleri | Çevre Bakanlığı 2024 × EKFE | Yıllık |
-| Mekansal fiyat tahmini | IDW (Airbnb Madrid Spatial repo) | İlan bazlı |
+| Mekansal fiyat tahmini | IDW  | İlan bazlı |
 | OLS Regresyon | PySAL/geosnap mantığı, saf JS | İlan bazlı |
-| Finansman modeli | AssetRevitalization repo | — |
-| Pro-Forma (MOIC/IRR) | Pro-Forma Investment Engine repo | — |
+| Finansman modeli | AssetRevitalization | — |
+| Pro-Forma (MOIC/IRR) | Pro-Forma Investment Engine | — |
 
 ---
 
