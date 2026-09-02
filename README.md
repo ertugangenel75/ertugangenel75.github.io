@@ -56,39 +56,6 @@ isdbm-klavuz.html       Metodoloji ve kullanım kılavuzu
 
 ## 📊 ISDBM Metodolojisi
 
-### 6 Metrik
-
-| Metrik | Ağırlık | Açıklama |
-|---|---|---|
-| 🚇 Ulaşım | %20 | Metro/tramvay, otoyol, liman, havalimanı |
-| 👥 Demografi | %15 | Nüfus yoğunluğu, büyüme, gelir |
-| 📈 Ticari Potansiyel | %20 | Ticaret hacmi, sektör uyumu |
-| ⚡ Altyapı | %20 | Elektrik, su, doğalgaz, internet |
-| 🛡️ Risk | %10 | Deprem, hukuki, pazar riski |
-| 🚀 Gelişme Potansiyeli | %15 | İmar, bölge gelişim planları |
-
-### CAPEX Formülü
-
-```
-CAPEX = Alan(m²) × Emsal × BirimMaliyet(₺/m²) × LokasyonKatsayısı × İnşaatSınıfıKatsayısı
-```
-
-### OLS Regresyon
-
-```
-m²Fiyat = β0 + β1×metroMesafe + β2×okulSayısı + β3×kat + β4×binaYaşı + β5×ilçeEndeks + ...
-β = (XᵀX)⁻¹ Xᵀy  (Gaussian elimination)
-```
-
-### Pro-Forma
-
-```
-MOIC = Toplam Dağıtım / Özkaynak Yatırımı
-IRR  = NPV=0 yapan oran (Newton-Raphson)
-```
-
----
-
 ## 📦 Veri Kaynakları
 
 | Veri | Kaynak | Güncelleme |
@@ -168,10 +135,11 @@ README.md           Bu dosya
 
 ## 🏢 Hakkında
 
-**ARGEPLANO / EGBIM** tarafından geliştirilmiştir.  
-Geliştirici: Hayati Küçük  
+**EGBIM** tarafından geliştirilmiştir.  
+Geliştirici: Ertuğan GENEL
 Platform: ISDBM Digital v1.2  
 Tarih: Eylül 2026
+Tüm hakları Ertuğan GENEL e aittir.
 
 ---
 
