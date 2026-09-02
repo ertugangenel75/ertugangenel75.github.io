@@ -101,20 +101,20 @@ const METRICS=[
 // İnşaat birim maliyetleri — 2026 Q2 (2024 Q4 baz × EKFE %31.9)
 // Kaynak: Çevre Bakanlığı 2024 birim fiyatları × TÜİK EKFE ekstrapolasyon
 const BIRIM_MALIYET={
-  konut:16000,    // 12.000 × 1.319
-  ticaret:18500,  // 14.000 × 1.319
-  ofis:20000,     // 15.000 × 1.319
-  otel:24000,     // 18.000 × 1.319
-  lojistik:10500, // 8.000  × 1.319
-  endustri:12000, // 9.000  × 1.319
-  datacenter:46000,// 35.000 × 1.319
-  karma:17000,    // 13.000 × 1.319
+  konut:26000,    // 
+  ticaret:28500,  // 
+  ofis:20000,     // 
+  otel:34000,     // 
+  lojistik:10500, // 
+  endustri:12000, // 
+  datacenter:46000,// 
+  karma:37000,    // 
 };
 const BIRIM_MALIYET_DONEM="2026 Q2";
 
 // ── Lokasyon Katsayıları (il bazlı prim) ─────────────────────────────────
 const LOKASYON_KAT={
-  "İstanbul":2.8,"Ankara":1.8,"İzmir":1.9,"Bursa":1.4,"Antalya":1.6,
+  "İstanbul":1.8,"Ankara":1.6,"İzmir":1.5,"Bursa":1.4,"Antalya":1.6,
   "Kocaeli":1.5,"Gaziantep":1.2,"Konya":1.1,"Mersin":1.2,"Adana":1.1,
   "Sakarya":1.2,"Trabzon":1.1,"Diyarbakır":1.0,"Şanlıurfa":0.9,
   "Hatay":1.0,"Kayseri":1.1,"Eskişehir":1.2,"Samsun":1.1,
@@ -124,22 +124,23 @@ const LOKASYON_KAT={
 
 // ── Yatırım Türü Şablonları — formül parametreleriyle ────────────────────
 const INV_TEMPLATES=[
-  {name:"Data Center Campus",    icon:"🏗️",birimKey:"datacenter",insaatKat:1.0, emsalDef:0.5,sinif:"A++",
-   scoreBonus:{altyapi:.3,ulasim:.2}, roi:"12-18%",irr:"14-22%",sure:"24-36 ay",kapasite:"40-60 MW"},
-  {name:"Lojistik Merkezi",      icon:"🚚",birimKey:"lojistik",  insaatKat:1.0, emsalDef:0.6,sinif:"B",
-   scoreBonus:{ulasim:.3,altyapi:.2}, roi:"14-20%",irr:"16-24%",sure:"18-24 ay",kapasite:"50.000 m²"},
-  {name:"Teknoloji Kampüsü",     icon:"💻",birimKey:"ofis",      insaatKat:1.15,emsalDef:2.0,sinif:"A",
-   scoreBonus:{demografi:.25,ticari:.25},roi:"10-15%",irr:"12-18%",sure:"30-42 ay",kapasite:"30.000 m²"},
+   
   {name:"Karma Kullanım",        icon:"🏢",birimKey:"karma",     insaatKat:1.1, emsalDef:2.5,sinif:"A/B",
-   scoreBonus:{demografi:.2,ticari:.2},roi:"8-14%",irr:"10-16%",sure:"36-48 ay",kapasite:"25.000 m²"},
+   scoreBonus:{demografi:.2,ticari:.2},roi:"8-14%",irr:"10-16%",sure:"36-48 ay",kapasite:"15.000 m²"},
   {name:"AVM / Ticaret Merkezi", icon:"🛒",birimKey:"ticaret",   insaatKat:1.2, emsalDef:1.5,sinif:"A",
-   scoreBonus:{ticari:.3,demografi:.2},roi:"9-13%",irr:"11-15%",sure:"24-36 ay",kapasite:"20.000 m²"},
+   scoreBonus:{ticari:.3,demografi:.2},roi:"9-13%",irr:"11-15%",sure:"24-36 ay",kapasite:"50.000 m²"},
   {name:"Otel / Turizm",         icon:"🏨",birimKey:"otel",      insaatKat:1.3, emsalDef:1.8,sinif:"A",
-   scoreBonus:{ulasim:.25,demografi:.15},roi:"7-12%",irr:"9-14%",sure:"18-30 ay",kapasite:"150-300 oda"},
+   scoreBonus:{ulasim:.25,demografi:.15},roi:"7-12%",irr:"9-14%",sure:"18-30 ay",kapasite:"50-300 oda"},
   {name:"Konut Projesi",         icon:"🏘️",birimKey:"konut",     insaatKat:1.0, emsalDef:2.0,sinif:"B",
-   scoreBonus:{demografi:.3,gelisme:.2},roi:"15-25%",irr:"18-28%",sure:"24-36 ay",kapasite:"200-500 konut"},
+   scoreBonus:{demografi:.3,gelisme:.2},roi:"15-25%",irr:"18-28%",sure:"24-36 ay",kapasite:"100-500 konut"},
   {name:"Endüstriyel Tesis",     icon:"🏭",birimKey:"endustri",  insaatKat:0.9, emsalDef:0.7,sinif:"B/C",
    scoreBonus:{altyapi:.25,ulasim:.25},roi:"11-17%",irr:"13-19%",sure:"12-18 ay",kapasite:"Özelleştirilmiş"},
+      {name:"Lojistik Merkezi",      icon:"🚚",birimKey:"lojistik",  insaatKat:1.0, emsalDef:0.6,sinif:"B",
+   scoreBonus:{ulasim:.3,altyapi:.2}, roi:"14-20%",irr:"16-24%",sure:"18-24 ay",kapasite:"50.000 m²"},
+    {name:"Okul / Kampüs",     icon:"💻",birimKey:"ofis",      insaatKat:1.15,emsalDef:2.0,sinif:"A",
+   scoreBonus:{demografi:.25,ticari:.25},roi:"10-15%",irr:"12-18%",sure:"30-42 ay",kapasite:"30.000 m²"},
+   {name:"Data Center Campus",    icon:"🏗️",birimKey:"datacenter",insaatKat:1.0, emsalDef:0.5,sinif:"A++",
+   scoreBonus:{altyapi:.3,ulasim:.2}, roi:"12-18%",irr:"14-22%",sure:"24-36 ay",kapasite:"40-60 MW"},
 ];
 
 // ── CAPEX Formül Motoru ──────────────────────────────────────────────────
