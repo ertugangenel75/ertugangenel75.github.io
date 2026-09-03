@@ -411,6 +411,7 @@ const MapFull=({parcels,onParcelSaved,onDrawnCoords,drawMode,setDrawMode,flyTo})
   const [coords,setCoords]=useState("—"),[zoom,setZoom]=useState(6);
   const [drawPts,setDrawPts]=useState(0);
   const [loadingPOI,setLoadingPOI]=useState(false);
+  const [show3D,setShow3D]=useState(false);
 
   useEffect(()=>{
     if(leafRef.current)return;
@@ -556,6 +557,7 @@ const MapFull=({parcels,onParcelSaved,onDrawnCoords,drawMode,setDrawMode,flyTo})
     setResults([]);setSearchQ(item.display_name.split(",")[0]);
   };
 
+  if(show3D) return <View3D parcels={parcels} onClose={()=>setShow3D(false)}/>;
   return <div style={{flex:1,display:"flex",flexDirection:"column"}}>
     <div style={{flex:1,position:"relative",minHeight:400}}>
       {/* Search */}
@@ -577,7 +579,10 @@ const MapFull=({parcels,onParcelSaved,onDrawnCoords,drawMode,setDrawMode,flyTo})
 
       {/* Draw controls */}
       <div style={{position:"absolute",bottom:50,right:10,zIndex:999,display:"flex",flexDirection:"column",gap:6}}>
-        {!drawMode&&<button className="map-fab" onClick={()=>setDrawMode(true)} style={{position:"relative",background:"#2563eb",color:"#fff",border:"none"}}>✏️ Parsel Çiz</button>}
+        {!drawMode&&<>
+          <button className="map-fab" onClick={()=>setShow3D(true)} style={{position:"relative",background:"#7c3aed",color:"#fff",border:"none"}}>🏙️ 3D Görünüm</button>
+          <button className="map-fab" onClick={()=>setDrawMode(true)} style={{position:"relative",background:"#2563eb",color:"#fff",border:"none"}}>✏️ Parsel Çiz</button>
+        </>}
         {drawMode&&<>
           <button className="map-fab" style={{position:"relative",background:"#16a34a",color:"#fff",border:"none"}} onClick={finishDraw} disabled={drawPts<3}>
             ✅ Tamamla ({drawPts} nokta)
@@ -2355,6 +2360,9 @@ const PiyasaAnaliz=({parcel})=>{
         ['🔬 IDW — Ters Mesafe Ağırlıklı Tahmin','Airbnb Madrid Spatial Price Modelling reposundan uyarlanan algoritma. Formül: ŵ = Σ(wi×pi) / Σwi, wi = 1/d^k (k=2). Her referans ilanın m² fiyatı, parsele olan mesafeyle ters orantılı ağırlıklandırılır. Yakın ilanlar daha çok etkiler.'],
         ['🔗 Komşuluk Tutarlılığı (Morans I Proxy)','Morans I mekansal otokorelasyon analizinin basitleştirilmiş versiyonu. Referans ilanlar arası fiyat varyasyon katsayısı (CV) hesaplanır. CV < 15: yüksek homojenlik, güvenilir tahmin. CV > 30: yüksek heterojenlik, lokasyon farkları var.'],
         ['🏠 Veri Kaynakları','Sahibinden.com, Hepsiemlak, Zingat, Emlakjet ilanlarından manuel veri girişi. API erişim kısıtları nedeniyle kullanıcı ilanı açar, fiyat/m² bilgisini sisteme girer. Koordinatlar opsiyonel — girilmezse parsel merkezine yakın rastgele offset atanır.'],
+        ['🗺️ GWR (Geographically Weighted Regression)','Lokasyon bazlı ağırlıklı regresyon. Her nokta için ayrı katsayı seti üretir — global OLS'den çok daha doğru. mgwr Python kütüphanesi kullanılır. Min 10 ilan gerekir.'],
+        ['🔗 Gerçek Moran's I + LISA','esda/libpysal kütüphaneleri ile gerçek mekansal otokorelasyon. I > 0: benzer fiyatlar kümeleniyor. LISA: yerel küme haritası üretir.'],
+        ['🔄 Spatial Lag Model (SLM)','Komşuluk etkisini modelleyen mekansal regresyon. spreg kütüphanesi. Rho (ρ) katsayısı komşuluk yayılımını ölçer.'],
       ].map(([baslik,aciklama])=>(
         <div key={baslik} style={{background:'#f8fafc',borderRadius:10,padding:14,border:'1px solid #e2e8f0'}}>
           <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{baslik}</div>
@@ -2362,7 +2370,686 @@ const PiyasaAnaliz=({parcel})=>{
         </div>
       ))}
     </div>}
+
+    {/* ── GWR / Moran / SLM — Backend Analiz Motorları ── */}
+    {activeTab==='sonuc'&&ilanlar.length>=2&&<BackendSpatial ilanlar={ilanlar} parcel={parcel}/>}
+
   </div>;
+};
+
+// ── Backend Spatial Analiz Motoru ──────────────────────────────────────────
+const BACKEND_URL='https://argeplano-isdbm.onrender.com';
+
+const BackendSpatial=({ilanlar,parcel})=>{
+  const [gwrSonuc,setGwrSonuc]=useState(null);
+  const [moranSonuc,setMoranSonuc]=useState(null);
+  const [slmSonuc,setSlmSonuc]=useState(null);
+  const [hotcellSonuc,setHotcellSonuc]=useState(null);
+  const [loading,setLoading]=useState({gwr:false,moran:false,slm:false,hotcell:false});
+  const [error,setError]=useState({gwr:null,moran:null,slm:null,hotcell:null});
+
+  // İlanları backend formatına çevir
+  function toListings(ilanlar) {
+    return ilanlar.map(il=>({
+      m2_fiyat: il.m2Fiyat||il.fiyat||0,
+      m2: il.m2||100,
+      lat: il.lat||parcel?.lat||0,
+      lng: il.lng||parcel?.lng||0,
+      metro_mesafe: il.metroMesafe||500,
+      okul_sayisi: il.okulSayisi||0,
+      oda: il.oda||3,
+      bina_yasi: il.binaYasi||10,
+    }));
+  }
+
+  async function runGWR() {
+    if(!parcel?.lat||!parcel?.lng) return alert('Parsel koordinatı yok');
+    if(ilanlar.length<10) return alert('GWR için en az 10 ilan gerekli (şu an: '+ilanlar.length+')');
+    setLoading(l=>({...l,gwr:true})); setError(e=>({...e,gwr:null}));
+    try {
+      const r=await fetch(BACKEND_URL+'/api/spatial/gwr',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({listings:toListings(ilanlar),target_lat:parcel.lat,target_lng:parcel.lng}),
+        signal:AbortSignal.timeout(60000),
+      });
+      const d=await r.json();
+      setGwrSonuc(d.result||d);
+    } catch(e) { setError(er=>({...er,gwr:e.message})); }
+    setLoading(l=>({...l,gwr:false}));
+  }
+
+  async function runMoran() {
+    if(ilanlar.length<4) return alert('Moran için en az 4 ilan gerekli');
+    setLoading(l=>({...l,moran:true})); setError(e=>({...e,moran:null}));
+    try {
+      const r=await fetch(BACKEND_URL+'/api/spatial/moran',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({listings:toListings(ilanlar)}),
+        signal:AbortSignal.timeout(30000),
+      });
+      const d=await r.json();
+      setMoranSonuc(d.result||d);
+    } catch(e) { setError(er=>({...er,moran:e.message})); }
+    setLoading(l=>({...l,moran:false}));
+  }
+
+  async function runSLM() {
+    if(ilanlar.length<8) return alert('SLM için en az 8 ilan gerekli (şu an: '+ilanlar.length+')');
+    setLoading(l=>({...l,slm:true})); setError(e=>({...e,slm:null}));
+    try {
+      const r=await fetch(BACKEND_URL+'/api/spatial/slm',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({listings:toListings(ilanlar)}),
+        signal:AbortSignal.timeout(30000),
+      });
+      const d=await r.json();
+      setSlmSonuc(d.result||d);
+    } catch(e) { setError(er=>({...er,slm:e.message})); }
+    setLoading(l=>({...l,slm:false}));
+  }
+
+  const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M ₺':n>=1e3?(n/1e3).toFixed(0)+'K ₺':Math.round(n||0)+' ₺';
+
+  async function runHotCell() {
+    if(ilanlar.length<4) return alert('Hot Cell için en az 4 ilan gerekli');
+    setLoading(l=>({...l,hotcell:true})); setError(e=>({...e,hotcell:null}));
+    try {
+      // İlanları noktaya çevir — deger = m2 fiyatı
+      const points = ilanlar.map(il=>({
+        lat: il.lat||parcel?.lat||0,
+        lng: il.lng||parcel?.lng||0,
+        deger: il.m2Fiyat||il.fiyat||0,
+        isim: il.baslik||'İlan',
+      }));
+      const r=await fetch(BACKEND_URL+'/api/spatial/hotcell',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({points}),
+        signal:AbortSignal.timeout(30000),
+      });
+      const d=await r.json();
+      setHotcellSonuc(d.result||d);
+    } catch(e) { setError(er=>({...er,hotcell:e.message})); }
+    setLoading(l=>({...l,hotcell:false}));
+  }
+
+  return (
+    <div style={{marginTop:16,border:'1.5px solid #e2e8f0',borderRadius:12,padding:16,background:'#fafafa'}}>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>🔬 Gelişmiş Mekansal Analiz (Backend)</div>
+      <div style={{fontSize:11,color:'#64748b',marginBottom:14}}>{ilanlar.length} ilan · argeplano-isdbm.onrender.com</div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+        {/* GWR */}
+        <div style={{background:'#eff6ff',borderRadius:10,padding:12,border:'1px solid #bfdbfe'}}>
+          <div style={{fontSize:12,fontWeight:700,color:'#1d4ed8',marginBottom:8}}>🗺️ GWR</div>
+          <div style={{fontSize:10,color:'#3b82f6',marginBottom:8}}>Min 10 ilan</div>
+          <button onClick={runGWR} disabled={loading.gwr||ilanlar.length<10}
+            style={{width:'100%',padding:'7px',background:ilanlar.length>=10?'#2563eb':'#94a3b8',color:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:ilanlar.length>=10?'pointer':'default'}}>
+            {loading.gwr?'⏳ Hesaplanıyor...':'🗺️ GWR Çalıştır'}
+          </button>
+          {error.gwr&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>⚠️ {error.gwr}</div>}
+          {gwrSonuc?.basari&&<div style={{marginTop:8}}>
+            <div style={{fontSize:16,fontWeight:800,color:'#1d4ed8'}}>{gwrSonuc.tahmin?.toLocaleString('tr-TR')} ₺/m²</div>
+            <div style={{fontSize:10,color:'#64748b'}}>R²: {gwrSonuc.r2_global} · BW: {gwrSonuc.bandwidth}</div>
+            <div style={{fontSize:10,color:'#3b82f6',marginTop:3}}>{gwrSonuc.yorum}</div>
+          </div>}
+          {gwrSonuc?.basari===false&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>{gwrSonuc.hata}</div>}
+        </div>
+
+        {/* Moran */}
+        <div style={{background:'#faf5ff',borderRadius:10,padding:12,border:'1px solid #d8b4fe'}}>
+          <div style={{fontSize:12,fontWeight:700,color:'#7c3aed',marginBottom:8}}>🔗 Moran's I</div>
+          <div style={{fontSize:10,color:'#8b5cf6',marginBottom:8}}>Min 4 ilan</div>
+          <button onClick={runMoran} disabled={loading.moran||ilanlar.length<4}
+            style={{width:'100%',padding:'7px',background:ilanlar.length>=4?'#7c3aed':'#94a3b8',color:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:ilanlar.length>=4?'pointer':'default'}}>
+            {loading.moran?'⏳ Hesaplanıyor...':'🔗 Moran Analizi'}
+          </button>
+          {error.moran&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>⚠️ {error.moran}</div>}
+          {moranSonuc?.basari&&<div style={{marginTop:8}}>
+            <div style={{fontSize:14,fontWeight:800,color:'#7c3aed'}}>I = {moranSonuc.I}</div>
+            <div style={{fontSize:10,color:'#64748b'}}>p = {moranSonuc.p_value} · {moranSonuc.anlamli?'✅ Anlamlı':'❌ Anlamsız'}</div>
+            <div style={{fontSize:10,color:'#6d28d9',marginTop:3}}>{moranSonuc.yorum}</div>
+          </div>}
+          {moranSonuc?.basari===false&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>{moranSonuc.hata}</div>}
+        </div>
+
+        {/* SLM */}
+        <div style={{background:'#f0fdf4',borderRadius:10,padding:12,border:'1px solid #86efac'}}>
+          <div style={{fontSize:12,fontWeight:700,color:'#166534',marginBottom:8}}>🔄 SLM</div>
+          <div style={{fontSize:10,color:'#16a34a',marginBottom:8}}>Min 8 ilan</div>
+          <button onClick={runSLM} disabled={loading.slm||ilanlar.length<8}
+            style={{width:'100%',padding:'7px',background:ilanlar.length>=8?'#16a34a':'#94a3b8',color:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:ilanlar.length>=8?'pointer':'default'}}>
+            {loading.slm?'⏳ Hesaplanıyor...':'🔄 SLM Çalıştır'}
+          </button>
+          {error.slm&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>⚠️ {error.slm}</div>}
+          {slmSonuc?.basari&&<div style={{marginTop:8}}>
+            <div style={{fontSize:14,fontWeight:800,color:'#166534'}}>ρ = {slmSonuc.rho}</div>
+            <div style={{fontSize:10,color:'#64748b'}}>R²: {slmSonuc.r2}</div>
+            <div style={{fontSize:10,color:'#166534',marginTop:3}}>{slmSonuc.yorum}</div>
+          </div>}
+          {slmSonuc?.basari===false&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>{slmSonuc.hata}</div>}
+        </div>
+      </div>
+
+      {/* Hot Cell G* Z-score */}
+      <div style={{marginTop:12,border:'1.5px solid #fde68a',borderRadius:10,padding:12,background:'#fffbeb'}}>
+        <div style={{fontWeight:700,fontSize:13,color:'#92400e',marginBottom:4}}>🔥 Hot Cell Analizi — Getis-Ord G*</div>
+        <div style={{fontSize:11,color:'#78350f',marginBottom:10}}>
+          İlan koordinatlarını grid hücrelerine böler, her hücre için G* Z-score hesaplar.
+          Z &gt; 2.58 = %99 güvenle sıcak bölge.
+        </div>
+        <button onClick={runHotCell} disabled={loading.hotcell||ilanlar.length<4}
+          style={{padding:'8px 16px',background:ilanlar.length>=4?'#d97706':'#94a3b8',color:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:ilanlar.length>=4?'pointer':'default',marginBottom:8}}>
+          {loading.hotcell?'⏳ Hesaplanıyor...':'🔥 Hot Cell Çalıştır'}
+        </button>
+        {ilanlar.length<4&&<span style={{fontSize:10,color:'#94a3b8',marginLeft:8}}>Min {4-ilanlar.length} ilan daha gerekli</span>}
+        {error.hotcell&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>⚠️ {error.hotcell}</div>}
+        {hotcellSonuc?.basari&&<div style={{marginTop:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:8}}>
+            <div style={{background:'#fef3c7',borderRadius:6,padding:'6px 8px',textAlign:'center'}}>
+              <div style={{fontSize:9,color:'#92400e'}}>Toplam Hücre</div>
+              <div style={{fontSize:14,fontWeight:800,color:'#d97706'}}>{hotcellSonuc.toplam_hucre}</div>
+            </div>
+            <div style={{background:'#fef3c7',borderRadius:6,padding:'6px 8px',textAlign:'center'}}>
+              <div style={{fontSize:9,color:'#92400e'}}>🔥 Sıcak (%90)</div>
+              <div style={{fontSize:14,fontWeight:800,color:'#ea580c'}}>{hotcellSonuc.sicak_hucre}</div>
+            </div>
+            <div style={{background:'#fef3c7',borderRadius:6,padding:'6px 8px',textAlign:'center'}}>
+              <div style={{fontSize:9,color:'#92400e'}}>🌋 Çok Sıcak (%99)</div>
+              <div style={{fontSize:14,fontWeight:800,color:'#dc2626'}}>{hotcellSonuc.cok_sicak_hucre}</div>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:'#92400e',background:'#fef3c7',borderRadius:6,padding:'6px 10px',marginBottom:8}}>
+            💡 {hotcellSonuc.yorum}
+          </div>
+          {hotcellSonuc.en_sicak_10?.length>0&&<div>
+            <div style={{fontSize:11,fontWeight:700,color:'#92400e',marginBottom:4}}>En Sıcak 10 Hücre:</div>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
+              <thead><tr style={{background:'#fef3c7'}}>
+                <th style={{padding:'4px 6px',textAlign:'left'}}>Koordinat</th>
+                <th style={{padding:'4px 6px',textAlign:'right'}}>Z-Score</th>
+                <th style={{padding:'4px 6px',textAlign:'right'}}>Ort. Değer</th>
+                <th style={{padding:'4px 6px',textAlign:'right'}}>Nokta</th>
+              </tr></thead>
+              <tbody>
+                {hotcellSonuc.en_sicak_10.map((h,i)=>(
+                  <tr key={i} style={{borderBottom:'1px solid #fde68a'}}>
+                    <td style={{padding:'4px 6px'}}>{h.lat?.toFixed(4)}, {h.lng?.toFixed(4)}</td>
+                    <td style={{padding:'4px 6px',textAlign:'right',fontWeight:700,color:h.zscore>2.58?'#dc2626':h.zscore>1.65?'#ea580c':'#d97706'}}>{h.zscore}</td>
+                    <td style={{padding:'4px 6px',textAlign:'right'}}>{h.deger?.toLocaleString('tr-TR')}</td>
+                    <td style={{padding:'4px 6px',textAlign:'right'}}>{h.nokta_sayisi}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>}
+        </div>}
+        {hotcellSonuc?.basari===false&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>{hotcellSonuc.hata}</div>}
+      </div>
+    </div>
+  );
+};
+
+// ── View3D Component — Three.js ──────────────────────────────────────────────
+const IMAR_YUKSEKLIK = {
+  'Konut Imarli':    35, 'Ticaret Imarli': 55, 'Sanayi Imarli': 18,
+  'Lojistik Imarli': 15, 'Turizm Imarli':  45, 'Tarim / Imarsiz': 6, 'Belirsiz': 20,
+};
+const IMAR_RENK_HEX = {
+  'Konut Imarli':'#2563eb','Ticaret Imarli':'#16a34a','Sanayi Imarli':'#f59e0b',
+  'Lojistik Imarli':'#8b5cf6','Turizm Imarli':'#ec4899','Tarim / Imarsiz':'#64748b','Belirsiz':'#94a3b8',
+};
+
+async function loadThree() {
+  if (window.THREE) return window.THREE;
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+    s.onload = () => res(window.THREE);
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+async function fetchOSMBuildings(lat, lng, radius=400) {
+  const query = `[out:json][timeout:15];way["building"](around:${radius},${lat},${lng});out body;>;out skel qt;`;
+  try {
+    const r = await fetch('https://overpass-api.de/api/interpreter',{
+      method:'POST', body: query, signal: AbortSignal.timeout(15000)
+    });
+    const d = await r.json();
+    const nodes = {};
+    d.elements.filter(e=>e.type==='node').forEach(n=>{nodes[n.id]=[n.lat,n.lon];});
+    return d.elements.filter(e=>e.type==='way'&&e.nodes&&e.nodes.length>2).map(w=>({
+      id: w.id,
+      coords: w.nodes.map(id=>nodes[id]).filter(Boolean),
+      height: parseInt(w.tags?.height||String(parseInt(w.tags?.['building:levels']||'3')*3.5)),
+      type: w.tags?.building||'yes',
+    })).filter(b=>b.coords.length>2);
+  } catch(e){ return []; }
+}
+
+const View3D = ({parcels, onClose}) => {
+  const mountRef    = React.useRef(null);
+  const sceneRef    = React.useRef(null);
+  const [status, setStatus]     = React.useState('Yükleniyor...');
+  const [bldCount, setBldCount] = React.useState(0);
+  const [selected, setSelected] = React.useState(parcels[0]||null);
+  const [rotating, setRotating] = React.useState(true);
+
+  React.useEffect(() => {
+    let animId, renderer, scene, camera, controls;
+    let isDragging=false, prevMouse={x:0,y:0};
+    let theta=30, phi=60, radius_cam=200;
+
+    async function init() {
+      const THREE = await loadThree().catch(e=>{setStatus('Three.js yüklenemedi: '+e.message);return null;});
+      if (!THREE) return;
+
+      // Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0f172a);
+      scene.fog = new THREE.Fog(0x0f172a, 300, 800);
+      sceneRef.current = scene;
+
+      // Camera
+      const w = mountRef.current.clientWidth;
+      const h = mountRef.current.clientHeight;
+      camera = new THREE.PerspectiveCamera(60, w/h, 0.1, 2000);
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({antialias:true});
+      renderer.setSize(w, h);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      mountRef.current.appendChild(renderer.domElement);
+
+      // Işıklar
+      const ambient = new THREE.AmbientLight(0x334155, 0.8);
+      scene.add(ambient);
+      const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+      sun.position.set(100, 200, 100);
+      sun.castShadow = true;
+      scene.add(sun);
+      const fill = new THREE.DirectionalLight(0x3b82f6, 0.3);
+      fill.position.set(-100, 50, -100);
+      scene.add(fill);
+
+      // Zemin grid
+      const gridH = new THREE.GridHelper(400, 40, 0x1e3a5f, 0x1e293b);
+      scene.add(gridH);
+      const groundGeo = new THREE.PlaneGeometry(400, 400);
+      const groundMat = new THREE.MeshLambertMaterial({color:0x0f172a});
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI/2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      // Merkez parsel
+      const centerPar = selected || parcels[0];
+      const centerLat = centerPar?.lat || 41.0;
+      const centerLng = centerPar?.lng || 29.0;
+      const SCALE = 100000; // 1 derece = 100000 birim
+
+      // Parselleri çiz
+      parcels.forEach(p => {
+        if (!p.coordinates || p.coordinates.length < 3) {
+          // Koordinat yoksa pin ekle
+          if (!p.lat || !p.lng) return;
+          const x = (p.lng - centerLng) * SCALE;
+          const z = (p.lat - centerLat) * SCALE;
+          const h = IMAR_YUKSEKLIK[p.planDurumu]||20;
+          const color = parseInt((IMAR_RENK_HEX[p.planDurumu]||'#2563eb').replace('#',''), 16);
+          const geo = new THREE.CylinderGeometry(3, 3, h, 8);
+          const mat = new THREE.MeshLambertMaterial({color, transparent:true, opacity:0.85});
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(x, h/2, z);
+          mesh.castShadow = true;
+          scene.add(mesh);
+
+          // Label pin
+          const pinGeo = new THREE.SphereGeometry(4, 8, 8);
+          const pinMat = new THREE.MeshLambertMaterial({color: 0xfbbf24});
+          const pin = new THREE.Mesh(pinGeo, pinMat);
+          pin.position.set(x, h+5, z);
+          scene.add(pin);
+          return;
+        }
+
+        // Polygon ekstrüzyon
+        const h = IMAR_YUKSEKLIK[p.planDurumu]||20;
+        const color = parseInt((IMAR_RENK_HEX[p.planDurumu]||'#2563eb').replace('#',''), 16);
+
+        const pts2D = p.coordinates.map(([lat,lng]) => new THREE.Vector2(
+          (lng - centerLng) * SCALE,
+          (lat - centerLat) * SCALE
+        ));
+
+        try {
+          const shape = new THREE.Shape(pts2D);
+          const extGeo = new THREE.ExtrudeGeometry(shape, {
+            depth: h, bevelEnabled: false,
+          });
+          // ExtrudeGeometry XY düzleminde — XZ'ye döndür
+          extGeo.rotateX(-Math.PI/2);
+          const mat = new THREE.MeshLambertMaterial({color, transparent:true, opacity:0.85});
+          const mesh = new THREE.Mesh(extGeo, mat);
+          mesh.castShadow = true;
+          scene.add(mesh);
+
+          // Kenar çizgisi
+          const edgeMat = new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.4});
+          const edgeGeo = new THREE.EdgesGeometry(extGeo);
+          scene.add(new THREE.LineSegments(edgeGeo, edgeMat));
+        } catch(e){}
+      });
+
+      setStatus('Çevre binalar yükleniyor...');
+
+      // OSM binalar
+      if (centerPar?.lat && centerPar?.lng) {
+        const blds = await fetchOSMBuildings(centerLat, centerLng);
+        setBldCount(blds.length);
+        blds.forEach(b => {
+          const pts2D = b.coords.map(([lat,lng]) => new THREE.Vector2(
+            (lng - centerLng) * SCALE,
+            (lat - centerLat) * SCALE
+          ));
+          if (pts2D.length < 3) return;
+          const h = Math.min(Math.max(b.height||10, 4), 120);
+          try {
+            const shape = new THREE.Shape(pts2D);
+            const extGeo = new THREE.ExtrudeGeometry(shape, {depth:h, bevelEnabled:false});
+            extGeo.rotateX(-Math.PI/2);
+            const mat = new THREE.MeshLambertMaterial({color:0x1e3a5f, transparent:true, opacity:0.75});
+            const mesh = new THREE.Mesh(extGeo, mat);
+            scene.add(mesh);
+          } catch(e){}
+        });
+      }
+
+      setStatus('');
+
+      // Mouse kontrolü
+      const el = renderer.domElement;
+      el.addEventListener('mousedown', e=>{isDragging=true; prevMouse={x:e.clientX,y:e.clientY};});
+      el.addEventListener('mouseup', ()=>isDragging=false);
+      el.addEventListener('mousemove', e=>{
+        if(!isDragging) return;
+        const dx=e.clientX-prevMouse.x, dy=e.clientY-prevMouse.y;
+        theta -= dx*0.3; phi = Math.max(10, Math.min(80, phi-dy*0.3));
+        prevMouse={x:e.clientX,y:e.clientY};
+      });
+      el.addEventListener('wheel', e=>{
+        radius_cam = Math.max(50, Math.min(500, radius_cam+e.deltaY*0.2));
+        e.preventDefault();
+      }, {passive:false});
+      // Touch
+      let lastTouch=null;
+      el.addEventListener('touchstart', e=>{lastTouch=e.touches[0];});
+      el.addEventListener('touchmove', e=>{
+        if(!lastTouch) return;
+        const dx=e.touches[0].clientX-lastTouch.clientX;
+        const dy=e.touches[0].clientY-lastTouch.clientY;
+        theta-=dx*0.5; phi=Math.max(10,Math.min(80,phi-dy*0.5));
+        lastTouch=e.touches[0]; e.preventDefault();
+      },{passive:false});
+
+      // Animate
+      let autoTheta = 0;
+      function animate() {
+        animId = requestAnimationFrame(animate);
+        if (!isDragging && rotating) { theta += 0.15; }
+        const tRad = theta*Math.PI/180, pRad = phi*Math.PI/180;
+        camera.position.set(
+          radius_cam*Math.sin(tRad)*Math.cos(pRad),
+          radius_cam*Math.sin(pRad),
+          radius_cam*Math.cos(tRad)*Math.cos(pRad)
+        );
+        camera.lookAt(0, 20, 0);
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      // Resize
+      window.addEventListener('resize', ()=>{
+        if(!mountRef.current) return;
+        const w=mountRef.current.clientWidth, h=mountRef.current.clientHeight;
+        camera.aspect=w/h; camera.updateProjectionMatrix();
+        renderer.setSize(w,h);
+      });
+    }
+
+    init();
+    return () => {
+      cancelAnimationFrame(animId);
+      if (renderer) { renderer.dispose(); if(mountRef.current&&renderer.domElement) mountRef.current.removeChild(renderer.domElement); }
+    };
+  }, [selected, rotating]);
+
+  const scoreCol = (selected?.score||0)>=80?'#16a34a':(selected?.score||0)>=60?'#2563eb':(selected?.score||0)>=40?'#f59e0b':'#ef4444';
+
+  return (
+    <div style={{position:'relative',width:'100%',height:'100%',background:'#0f172a',overflow:'hidden'}}>
+      <div ref={mountRef} style={{width:'100%',height:'100%'}}/>
+
+      {/* Status */}
+      {status && (
+        <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',color:'#fff',fontSize:14,textAlign:'center',pointerEvents:'none'}}>
+          <div style={{fontSize:36,marginBottom:12}}>🏙️</div>
+          <div style={{fontWeight:600}}>{status}</div>
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div style={{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}}>
+        <button onClick={onClose} style={{background:'rgba(15,23,42,.9)',color:'#fff',border:'1px solid #334155',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+          ← 2D Harita
+        </button>
+        <button onClick={()=>setRotating(r=>!r)} style={{background:'rgba(15,23,42,.9)',color:rotating?'#fbbf24':'#64748b',border:'1px solid #334155',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}}>
+          {rotating?'⏸ Durdur':'▶ Döndür'}
+        </button>
+        <div style={{background:'rgba(15,23,42,.85)',border:'1px solid #334155',borderRadius:8,padding:'10px 12px',fontSize:10,color:'#94a3b8'}}>
+          <div style={{fontWeight:700,color:'#e2e8f0',marginBottom:6}}>Lejant</div>
+          {Object.entries(IMAR_RENK_HEX).map(([k,c])=>(
+            <div key={k} style={{display:'flex',alignItems:'center',gap:5,marginBottom:3}}>
+              <div style={{width:8,height:8,borderRadius:2,background:c,flexShrink:0}}/>
+              <span>{k.replace(' Imarli','').replace(' / Imarsiz','')}</span>
+              <span style={{marginLeft:'auto',color:'#475569'}}>{IMAR_YUKSEKLIK[k]}m</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Bilgi paneli */}
+      <div style={{position:'absolute',bottom:16,left:12,zIndex:10,background:'rgba(15,23,42,.9)',border:'1px solid #334155',borderRadius:10,padding:14,minWidth:200}}>
+        <div style={{fontSize:10,color:'#64748b',marginBottom:6,fontWeight:600}}>3D GÖRÜNÜM</div>
+        {selected ? <>
+          <div style={{fontSize:14,fontWeight:700,color:'#fff',marginBottom:2}}>{selected.projeAdi||'İsimsiz'}</div>
+          <div style={{fontSize:11,color:'#94a3b8',marginBottom:6}}>{selected.il} / {selected.ilce}</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            <span style={{fontSize:10,background:'rgba(255,255,255,.08)',borderRadius:4,padding:'2px 6px',color:'#e2e8f0'}}>{(selected.alan||0).toLocaleString('tr-TR')} m²</span>
+            <span style={{fontSize:10,borderRadius:4,padding:'2px 6px',color:scoreCol,fontWeight:700,background:'rgba(255,255,255,.08)'}}>ISDBM: {selected.score||0}</span>
+            <span style={{fontSize:10,background:'rgba(255,255,255,.08)',borderRadius:4,padding:'2px 6px',color:'#e2e8f0'}}>{IMAR_YUKSEKLIK[selected.planDurumu]||20}m</span>
+          </div>
+        </> : <div style={{fontSize:12,color:'#64748b'}}>Parsel seçilmedi</div>}
+        <div style={{marginTop:8,fontSize:10,color:'#475569'}}>
+          🏗️ {parcels.length} parsel · 🏘️ {bldCount} OSM bina
+        </div>
+        <div style={{marginTop:4,fontSize:10,color:'#334155'}}>
+          Sürükle: döndür · Scroll: zoom
+        </div>
+      </div>
+
+      {/* Parsel seç */}
+      {parcels.length > 1 && (
+        <div style={{position:'absolute',bottom:16,right:12,zIndex:10,background:'rgba(15,23,42,.9)',border:'1px solid #334155',borderRadius:10,padding:10,maxWidth:180}}>
+          <div style={{fontSize:10,color:'#64748b',marginBottom:6,fontWeight:600}}>MERKEZ PARSEL</div>
+          {parcels.slice(0,5).map(p=>(
+            <div key={p.id} onClick={()=>setSelected(p)}
+              style={{fontSize:11,padding:'4px 8px',borderRadius:6,cursor:'pointer',marginBottom:3,
+                background:selected?.id===p.id?'rgba(37,99,235,.3)':'rgba(255,255,255,.05)',
+                color:selected?.id===p.id?'#60a5fa':'#94a3b8',
+                border:selected?.id===p.id?'1px solid #3b82f6':'1px solid transparent'}}>
+              {p.projeAdi||`${p.il||'?'}/${p.ilce||'?'}`}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Terrain + Landuse Component// ── Terrain + Landuse Component ───────────────────────────────────────────
+const TerrainLanduse = ({parcel, apiUrl}) => {
+  const [terrain, setTerrain] = React.useState(null);
+  const [landuse, setLanduse] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [radius, setRadius] = React.useState(1000);
+  const loaded = React.useRef(false);
+
+  React.useEffect(() => {
+    if(!parcel?.lat || !parcel?.lng) return;
+    if(loaded.current) return;
+    loaded.current = true;
+    fetchAll();
+  }, [parcel?.id]);
+
+  async function fetchAll() {
+    setLoading(true);
+    try {
+      const [tRes, lRes] = await Promise.allSettled([
+        fetch(apiUrl+'/api/spatial/terrain',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({lat:parcel.lat, lng:parcel.lng}),
+          signal:AbortSignal.timeout(20000),
+        }).then(r=>r.json()),
+        fetch(apiUrl+'/api/spatial/landuse',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({lat:parcel.lat, lng:parcel.lng, radius}),
+          signal:AbortSignal.timeout(25000),
+        }).then(r=>r.json()),
+      ]);
+      if(tRes.status==='fulfilled') setTerrain(tRes.value?.result);
+      if(lRes.status==='fulfilled') setLanduse(lRes.value?.result);
+    } catch(e) {}
+    setLoading(false);
+  }
+
+  async function refetchLanduse() {
+    setLoading(true);
+    try {
+      const r = await fetch(apiUrl+'/api/spatial/landuse',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({lat:parcel.lat, lng:parcel.lng, radius}),
+        signal:AbortSignal.timeout(25000),
+      });
+      const d = await r.json();
+      setLanduse(d?.result);
+    } catch(e) {}
+    setLoading(false);
+  }
+
+  if(!parcel?.lat) return null;
+
+  return (
+    <div className="card" style={{marginBottom:16}}>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>🌍 Arazi & Çevre Analizi</div>
+
+      {loading && <div style={{fontSize:12,color:'#64748b',padding:'8px 0'}}>⏳ Yükleniyor...</div>}
+
+      {/* Terrain */}
+      {terrain?.basari && (
+        <div style={{background:'#f0fdf4',borderRadius:10,padding:14,marginBottom:12,border:'1px solid #86efac'}}>
+          <div style={{fontWeight:700,fontSize:13,color:'#166534',marginBottom:10}}>⛰️ Arazi Analizi (Horn Algoritması)</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:8,marginBottom:10}}>
+            {[
+              ['Yükseklik', terrain.merkez_yukseklik+'m', '#166534'],
+              ['Eğim', terrain.egim_derece+'°', terrain.egim_derece>10?'#ef4444':terrain.egim_derece>5?'#f59e0b':'#16a34a'],
+              ['Eğim %', '%'+terrain.egim_yuzde, '#374151'],
+              ['Bakı', terrain.baki_yon, '#374151'],
+            ].map(([l,v,c])=>(
+              <div key={l} style={{background:'#fff',borderRadius:7,padding:'8px 10px',border:'1px solid #dcfce7'}}>
+                <div style={{fontSize:10,color:'#64748b'}}>{l}</div>
+                <div style={{fontSize:14,fontWeight:800,color:c}}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:12,fontWeight:600,color:'#166534',marginBottom:4}}>{terrain.egim_sinif}</div>
+          <div style={{fontSize:11,color:'#374151',marginBottom:6}}>{terrain.insaat_uygunlugu}</div>
+          <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>{terrain.yorum}</div>
+          {terrain.risk_skoru > 0 && (
+            <div style={{marginTop:8,background:'#fee2e2',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#b91c1c'}}>
+              ⚠️ Arazi Risk Skoru: {terrain.risk_skoru}/100
+            </div>
+          )}
+        </div>
+      )}
+      {terrain?.basari===false && (
+        <div style={{fontSize:11,color:'#94a3b8',marginBottom:8}}>⛰️ Yükseklik verisi alınamadı</div>
+      )}
+
+      {/* Landuse */}
+      {landuse?.basari && (
+        <div style={{background:'#f8fafc',borderRadius:10,padding:14,border:'1px solid #e2e8f0'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
+            <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>🗺️ Arazi Kullanımı ({radius}m yarıçap)</div>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <select value={radius} onChange={e=>{setRadius(Number(e.target.value));}}
+                style={{fontSize:11,padding:'4px 8px',border:'1px solid #e2e8f0',borderRadius:6}}>
+                {[500,1000,1500,2000,3000].map(r=><option key={r} value={r}>{r}m</option>)}
+              </select>
+              <button onClick={refetchLanduse} style={{fontSize:11,padding:'4px 10px',background:'#2563eb',color:'#fff',border:'none',borderRadius:6,cursor:'pointer'}}>
+                Güncelle
+              </button>
+            </div>
+          </div>
+          <div style={{fontSize:12,color:'#64748b',marginBottom:10}}>
+            Baskın: <b style={{color:'#0f172a'}}>{landuse.baskin_tr}</b>
+          </div>
+
+          {/* Dağılım bar'ları */}
+          <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
+            {Object.entries(landuse.dagilim_tr||{}).slice(0,6).map(([k,v])=>(
+              <div key={k}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
+                  <span style={{color:'#374151'}}>{k}</span>
+                  <span style={{fontWeight:600}}>%{v}</span>
+                </div>
+                <div style={{background:'#e2e8f0',borderRadius:4,height:6}}>
+                  <div style={{background:'#2563eb',borderRadius:4,height:6,width:`${Math.min(v,100)}%`,transition:'width .3s'}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Metrik katkısı */}
+          {landuse.metrik_katki && Object.values(landuse.metrik_katki).some(v=>v!==0) && (
+            <div style={{background:'#eff6ff',borderRadius:8,padding:'8px 12px',marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:'#1d4ed8',marginBottom:6}}>📊 ISDBM Metrik Katkısı</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                {Object.entries(landuse.metrik_katki).filter(([,v])=>v!==0).map(([k,v])=>(
+                  <span key={k} style={{fontSize:10,padding:'2px 8px',borderRadius:12,
+                    background:v>0?'#dcfce7':'#fee2e2',
+                    color:v>0?'#166534':'#b91c1c',fontWeight:600}}>
+                    {k}: {v>0?'+':''}{v}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>{landuse.yorum}</div>
+        </div>
+      )}
+      {landuse?.basari===false && (
+        <div style={{fontSize:11,color:'#94a3b8'}}>🗺️ Arazi kullanım verisi bulunamadı</div>
+      )}
+    </div>
+  );
 };
 
 // ── AI Screen Component ────────────────────────────────────────────────────
@@ -2384,7 +3071,9 @@ ${parcels.map(p=>`- ${p.projeAdi||"İsimsiz"} | ${p.il}/${p.ilce} | Alan: ${p.al
 `:"Henüz kayıtlı parsel yok.";
 
   const systemPrompt=`Sen ISDBM Digital platformunun AI asistanısın. ARGEPLANO şirketi için çalışıyorsun.
-ISDBM (Integrated Site Development & Business Model) metodolojisi: 6 metrik üzerinden 0-100 arası skor:
+
+## ISDBM Metodolojisi
+6 metrik üzerinden 0-100 arası skor:
 - Ulaşım (%20): metro, otoyol, liman, havalimanı erişimi
 - Demografi (%15): nüfus yoğunluğu, büyüme, gelir
 - Ticari Potansiyel (%20): ticaret hacmi, sektör uyumu
@@ -2394,9 +3083,37 @@ ISDBM (Integrated Site Development & Business Model) metodolojisi: 6 metrik üze
 
 Yatırım alternatifleri: Data Center, Lojistik Merkezi, Teknoloji Kampüsü, Karma Kullanım, AVM, Otel, Konut, Endüstriyel Tesis.
 
+## Mekansal Tasarım Analiz Metodolojisi (Spatial Design Context)
+Parsel analizi yaparken şu adımları izle:
+
+1. PROJE SINIFLANDIRMASI: Parseli şu kriterlere göre sınıflandır:
+   - Ana kullanım alanı: Konut / Ticaret / Sanayi/Lojistik / Karma / Turizm / Kamusal
+   - Müdahale tipi: Yeni inşaat / Dönüşüm / Uyarlamalı yeniden kullanım / Geçici
+   - Ölçek: Parsel (<1ha) / Saha (1-10ha) / Bölge (>10ha)
+   - Aşama: Yer seçimi / Kavram / Çoklu senaryo karşılaştırma / Entegrasyon
+
+2. TEMEL TASARIM SORUSU: Parselin temel çelişkisini ve fırsatını tek cümleyle yaz.
+   Format: "[Nesne] için [kısıt] ile [fırsat] arasındaki dengeyi nasıl kurarız?"
+
+3. SAHA İPUÇLARI: Tasarımı etkileyecek 3-5 kritik faktörü çıkar:
+   - Ulaşım erişimi ve bağlantı
+   - Çevre yapı dokusu ve yoğunluk
+   - Ekolojik koşullar ve riskler
+   - Kullanıcı profili ve talep
+   - Yasal/imar kısıtları
+
+4. ÇOKLU SENARYO: En az 2-3 farklı yatırım yönünü karşılaştır:
+   - Her senaryo için: temel fikir + avantaj + risk + CAPEX tahmini
+   - Senaryolar birbirinden farklı mekansal organizasyon önermelidir
+
+5. ÖNERİ VE GEREKÇELENDİRME:
+   - Önerilen yaklaşım ve neden
+   - Doğrulanması gereken varsayımlar
+   - Bir sonraki adımda yapılacaklar
+
 ${parcelContext}
 
-Türkçe yanıt ver. Kısa ve net ol. Sayısal analizlerde somut yorum yap.`;
+Türkçe yanıt ver. Analiz yaparken önce sınıflandırmayı yap, sonra temel soruyu yaz, sonra senaryoları karşılaştır. Sayısal verileri (ISDBM skoru, alan, POI sayısı) aktif olarak kullan.`;
 
   const sendMessage=async()=>{
     const q=input.trim(); if(!q||loading) return;
@@ -2435,11 +3152,12 @@ Türkçe yanıt ver. Kısa ve net ol. Sayısal analizlerde somut yorum yap.`;
   };
 
   const QUICK=[
-    "En yüksek skorlu parseli analiz et",
-    "Tüm parselleri karşılaştır",
-    "Data Center için hangi parsel uygun?",
-    "Risk skorları düşük parseller hangileri?",
-    "Yatırım öncelik sıramı belirle",
+    "Bu parseli sınıflandır ve temel tasarım sorusunu belirle",
+    "3 farklı yatırım senaryosu karşılaştır — avantaj, risk ve CAPEX ile",
+    "Saha ipuçlarını çıkar — ulaşım, doku, ekoloji, talep, imar",
+    "ISDBM skorumu nasıl artırabilirim? Metrik bazlı öner",
+    "Tüm parselleri karşılaştır ve yatırım öncelik sırası belirle",
+    "Risk faktörlerini analiz et ve azaltma önerileri sun",
   ];
 
   return <div style={{display:"flex",flexDirection:"column",height:"100%",gap:0}}>
@@ -3136,6 +3854,9 @@ const App=()=>{
               ));
             })()}
           </div>}
+
+          {/* Terrain + Landuse */}
+          {p.lat&&p.lng&&<TerrainLanduse parcel={p} apiUrl={BACKEND_URL}/>}
 
           {/* Alternatives */}
           <div className="card">
