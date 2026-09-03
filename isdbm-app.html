@@ -71,7 +71,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 </head>
 <body>
 <div id="root"></div>
-
 <script type="text/babel">
 const {useState,useEffect,useRef,useCallback,useMemo}=React;
 
@@ -199,7 +198,13 @@ const TUIK_NUFUS={
 // Nüfus verisi al — önce OSM dene, sonra statik JSON
 async function fetchNufusData(lat, lng, il, ilce) {
   // 1) OSM Overpass — population tag
-  const query='[out:json][timeout:10];(relation["name"="'+ilce+'"]["admin_level"="7"](around:30000,'+lat+','+lng+');relation["name"="'+ilce+'"]["admin_level"="8"](around:30000,'+lat+','+lng+');relation["name"="'+il+'"]["admin_level"="4"];);out tags;';
+  const query=`[out:json][timeout:10];
+(
+  relation["name"="${ilce}"]["admin_level"="7"](around:30000,${lat},${lng});
+  relation["name"="${ilce}"]["admin_level"="8"](around:30000,${lat},${lng});
+  relation["name"="${il}"]["admin_level"="4"];
+);
+out tags;`;
   try {
     const r=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:query});
     const d=await r.json();
@@ -574,10 +579,7 @@ const MapFull=({parcels,onParcelSaved,onDrawnCoords,drawMode,setDrawMode,flyTo})
 
       {/* Draw controls */}
       <div style={{position:"absolute",bottom:50,right:10,zIndex:999,display:"flex",flexDirection:"column",gap:6}}>
-        {!drawMode&&<>
-          <button className="map-fab" onClick={()=>setShow3D(true)} style={{position:"relative",background:"#7c3aed",color:"#fff",border:"none"}}>🏙️ 3D Görünüm</button>
-          <button className="map-fab" onClick={()=>setDrawMode(true)} style={{position:"relative",background:"#2563eb",color:"#fff",border:"none"}}>✏️ Parsel Çiz</button>
-        </>}
+        {!drawMode&&<><button className="map-fab" onClick={()=>setShow3D(true)} style={{position:"relative",background:"#7c3aed",color:"#fff",border:"none"}}>🏙️ 3D</button><button className="map-fab" onClick={()=>setDrawMode(true)} style={{position:"relative",background:"#2563eb",color:"#fff",border:"none"}}>✏️ Parsel Çiz</button></>}
         {drawMode&&<>
           <button className="map-fab" style={{position:"relative",background:"#16a34a",color:"#fff",border:"none"}} onClick={finishDraw} disabled={drawPts<3}>
             ✅ Tamamla ({drawPts} nokta)
@@ -2355,9 +2357,6 @@ const PiyasaAnaliz=({parcel})=>{
         ['🔬 IDW — Ters Mesafe Ağırlıklı Tahmin','Airbnb Madrid Spatial Price Modelling reposundan uyarlanan algoritma. Formül: ŵ = Σ(wi×pi) / Σwi, wi = 1/d^k (k=2). Her referans ilanın m² fiyatı, parsele olan mesafeyle ters orantılı ağırlıklandırılır. Yakın ilanlar daha çok etkiler.'],
         ['🔗 Komşuluk Tutarlılığı (Morans I Proxy)','Morans I mekansal otokorelasyon analizinin basitleştirilmiş versiyonu. Referans ilanlar arası fiyat varyasyon katsayısı (CV) hesaplanır. CV < 15: yüksek homojenlik, güvenilir tahmin. CV > 30: yüksek heterojenlik, lokasyon farkları var.'],
         ['🏠 Veri Kaynakları','Sahibinden.com, Hepsiemlak, Zingat, Emlakjet ilanlarından manuel veri girişi. API erişim kısıtları nedeniyle kullanıcı ilanı açar, fiyat/m² bilgisini sisteme girer. Koordinatlar opsiyonel — girilmezse parsel merkezine yakın rastgele offset atanır.'],
-        ['🗺️ GWR (Geographically Weighted Regression)','Lokasyon bazlı ağırlıklı regresyon. Her nokta için ayrı katsayı seti üretir — global OLS'den çok daha doğru. mgwr Python kütüphanesi kullanılır. Min 10 ilan gerekir.'],
-        ['🔗 Gerçek Moran's I + LISA','esda/libpysal kütüphaneleri ile gerçek mekansal otokorelasyon. I > 0: benzer fiyatlar kümeleniyor. LISA: yerel küme haritası üretir.'],
-        ['🔄 Spatial Lag Model (SLM)','Komşuluk etkisini modelleyen mekansal regresyon. spreg kütüphanesi. Rho (ρ) katsayısı komşuluk yayılımını ölçer.'],
       ].map(([baslik,aciklama])=>(
         <div key={baslik} style={{background:'#f8fafc',borderRadius:10,padding:14,border:'1px solid #e2e8f0'}}>
           <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>{baslik}</div>
@@ -2365,377 +2364,7 @@ const PiyasaAnaliz=({parcel})=>{
         </div>
       ))}
     </div>}
-
-    {/* ── GWR / Moran / SLM — Backend Analiz Motorları ── */}
-    {activeTab==='sonuc'&&ilanlar.length>=2&&<BackendSpatial ilanlar={ilanlar} parcel={parcel}/>}
-
   </div>;
-};
-
-// ── Backend Spatial Analiz Motoru ──────────────────────────────────────────
-const BACKEND_URL='https://argeplano-isdbm.onrender.com';
-
-const BackendSpatial=({ilanlar,parcel})=>{
-  const [gwrSonuc,setGwrSonuc]=useState(null);
-  const [moranSonuc,setMoranSonuc]=useState(null);
-  const [slmSonuc,setSlmSonuc]=useState(null);
-  const [hotcellSonuc,setHotcellSonuc]=useState(null);
-  const [loading,setLoading]=useState({gwr:false,moran:false,slm:false,hotcell:false});
-  const [error,setError]=useState({gwr:null,moran:null,slm:null,hotcell:null});
-
-  // İlanları backend formatına çevir
-  function toListings(ilanlar) {
-    return ilanlar.map(il=>({
-      m2_fiyat: il.m2Fiyat||il.fiyat||0,
-      m2: il.m2||100,
-      lat: il.lat||parcel?.lat||0,
-      lng: il.lng||parcel?.lng||0,
-      metro_mesafe: il.metroMesafe||500,
-      okul_sayisi: il.okulSayisi||0,
-      oda: il.oda||3,
-      bina_yasi: il.binaYasi||10,
-    }));
-  }
-
-  async function runGWR() {
-    if(!parcel?.lat||!parcel?.lng) return alert('Parsel koordinatı yok');
-    if(ilanlar.length<10) return alert('GWR için en az 10 ilan gerekli (şu an: '+ilanlar.length+')');
-    setLoading(l=>({...l,gwr:true})); setError(e=>({...e,gwr:null}));
-    try {
-      const r=await fetch(BACKEND_URL+'/api/spatial/gwr',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({listings:toListings(ilanlar),target_lat:parcel.lat,target_lng:parcel.lng}),
-        signal:AbortSignal.timeout(60000),
-      });
-      const d=await r.json();
-      setGwrSonuc(d.result||d);
-    } catch(e) { setError(er=>({...er,gwr:e.message})); }
-    setLoading(l=>({...l,gwr:false}));
-  }
-
-  async function runMoran() {
-    if(ilanlar.length<4) return alert('Moran için en az 4 ilan gerekli');
-    setLoading(l=>({...l,moran:true})); setError(e=>({...e,moran:null}));
-    try {
-      const r=await fetch(BACKEND_URL+'/api/spatial/moran',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({listings:toListings(ilanlar)}),
-        signal:AbortSignal.timeout(30000),
-      });
-      const d=await r.json();
-      setMoranSonuc(d.result||d);
-    } catch(e) { setError(er=>({...er,moran:e.message})); }
-    setLoading(l=>({...l,moran:false}));
-  }
-
-  async function runSLM() {
-    if(ilanlar.length<8) return alert('SLM için en az 8 ilan gerekli (şu an: '+ilanlar.length+')');
-    setLoading(l=>({...l,slm:true})); setError(e=>({...e,slm:null}));
-    try {
-      const r=await fetch(BACKEND_URL+'/api/spatial/slm',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({listings:toListings(ilanlar)}),
-        signal:AbortSignal.timeout(30000),
-      });
-      const d=await r.json();
-      setSlmSonuc(d.result||d);
-    } catch(e) { setError(er=>({...er,slm:e.message})); }
-    setLoading(l=>({...l,slm:false}));
-  }
-
-  const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M ₺':n>=1e3?(n/1e3).toFixed(0)+'K ₺':Math.round(n||0)+' ₺';
-
-  async function runHotCell() {
-    if(ilanlar.length<4) return alert('Hot Cell için en az 4 ilan gerekli');
-    setLoading(l=>({...l,hotcell:true})); setError(e=>({...e,hotcell:null}));
-    try {
-      // İlanları noktaya çevir — deger = m2 fiyatı
-      const points = ilanlar.map(il=>({
-        lat: il.lat||parcel?.lat||0,
-        lng: il.lng||parcel?.lng||0,
-        deger: il.m2Fiyat||il.fiyat||0,
-        isim: il.baslik||'İlan',
-      }));
-      const r=await fetch(BACKEND_URL+'/api/spatial/hotcell',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({points}),
-        signal:AbortSignal.timeout(30000),
-      });
-      const d=await r.json();
-      setHotcellSonuc(d.result||d);
-    } catch(e) { setError(er=>({...er,hotcell:e.message})); }
-    setLoading(l=>({...l,hotcell:false}));
-  }
-
-  return (
-    <div style={{marginTop:16,border:'1.5px solid #e2e8f0',borderRadius:12,padding:16,background:'#fafafa'}}>
-      <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>🔬 Gelişmiş Mekansal Analiz (Backend)</div>
-      <div style={{fontSize:11,color:'#64748b',marginBottom:14}}>{ilanlar.length} ilan · argeplano-isdbm.onrender.com</div>
-
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
-        {/* GWR */}
-        <div style={{background:'#eff6ff',borderRadius:10,padding:12,border:'1px solid #bfdbfe'}}>
-          <div style={{fontSize:12,fontWeight:700,color:'#1d4ed8',marginBottom:8}}>🗺️ GWR</div>
-          <div style={{fontSize:10,color:'#3b82f6',marginBottom:8}}>Min 10 ilan</div>
-          <button onClick={runGWR} disabled={loading.gwr||ilanlar.length<10}
-            style={{width:'100%',padding:'7px',background:ilanlar.length>=10?'#2563eb':'#94a3b8',color:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:ilanlar.length>=10?'pointer':'default'}}>
-            {loading.gwr?'⏳ Hesaplanıyor...':'🗺️ GWR Çalıştır'}
-          </button>
-          {error.gwr&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>⚠️ {error.gwr}</div>}
-          {gwrSonuc?.basari&&<div style={{marginTop:8}}>
-            <div style={{fontSize:16,fontWeight:800,color:'#1d4ed8'}}>{gwrSonuc.tahmin?.toLocaleString('tr-TR')} ₺/m²</div>
-            <div style={{fontSize:10,color:'#64748b'}}>R²: {gwrSonuc.r2_global} · BW: {gwrSonuc.bandwidth}</div>
-            <div style={{fontSize:10,color:'#3b82f6',marginTop:3}}>{gwrSonuc.yorum}</div>
-          </div>}
-          {gwrSonuc?.basari===false&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>{gwrSonuc.hata}</div>}
-        </div>
-
-        {/* Moran */}
-        <div style={{background:'#faf5ff',borderRadius:10,padding:12,border:'1px solid #d8b4fe'}}>
-          <div style={{fontSize:12,fontWeight:700,color:'#7c3aed',marginBottom:8}}>🔗 Moran's I</div>
-          <div style={{fontSize:10,color:'#8b5cf6',marginBottom:8}}>Min 4 ilan</div>
-          <button onClick={runMoran} disabled={loading.moran||ilanlar.length<4}
-            style={{width:'100%',padding:'7px',background:ilanlar.length>=4?'#7c3aed':'#94a3b8',color:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:ilanlar.length>=4?'pointer':'default'}}>
-            {loading.moran?'⏳ Hesaplanıyor...':'🔗 Moran Analizi'}
-          </button>
-          {error.moran&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>⚠️ {error.moran}</div>}
-          {moranSonuc?.basari&&<div style={{marginTop:8}}>
-            <div style={{fontSize:14,fontWeight:800,color:'#7c3aed'}}>I = {moranSonuc.I}</div>
-            <div style={{fontSize:10,color:'#64748b'}}>p = {moranSonuc.p_value} · {moranSonuc.anlamli?'✅ Anlamlı':'❌ Anlamsız'}</div>
-            <div style={{fontSize:10,color:'#6d28d9',marginTop:3}}>{moranSonuc.yorum}</div>
-          </div>}
-          {moranSonuc?.basari===false&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>{moranSonuc.hata}</div>}
-        </div>
-
-        {/* SLM */}
-        <div style={{background:'#f0fdf4',borderRadius:10,padding:12,border:'1px solid #86efac'}}>
-          <div style={{fontSize:12,fontWeight:700,color:'#166534',marginBottom:8}}>🔄 SLM</div>
-          <div style={{fontSize:10,color:'#16a34a',marginBottom:8}}>Min 8 ilan</div>
-          <button onClick={runSLM} disabled={loading.slm||ilanlar.length<8}
-            style={{width:'100%',padding:'7px',background:ilanlar.length>=8?'#16a34a':'#94a3b8',color:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:ilanlar.length>=8?'pointer':'default'}}>
-            {loading.slm?'⏳ Hesaplanıyor...':'🔄 SLM Çalıştır'}
-          </button>
-          {error.slm&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>⚠️ {error.slm}</div>}
-          {slmSonuc?.basari&&<div style={{marginTop:8}}>
-            <div style={{fontSize:14,fontWeight:800,color:'#166534'}}>ρ = {slmSonuc.rho}</div>
-            <div style={{fontSize:10,color:'#64748b'}}>R²: {slmSonuc.r2}</div>
-            <div style={{fontSize:10,color:'#166534',marginTop:3}}>{slmSonuc.yorum}</div>
-          </div>}
-          {slmSonuc?.basari===false&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>{slmSonuc.hata}</div>}
-        </div>
-      </div>
-
-      {/* Hot Cell G* Z-score */}
-      <div style={{marginTop:12,border:'1.5px solid #fde68a',borderRadius:10,padding:12,background:'#fffbeb'}}>
-        <div style={{fontWeight:700,fontSize:13,color:'#92400e',marginBottom:4}}>🔥 Hot Cell Analizi — Getis-Ord G*</div>
-        <div style={{fontSize:11,color:'#78350f',marginBottom:10}}>
-          İlan koordinatlarını grid hücrelerine böler, her hücre için G* Z-score hesaplar.
-          Z &gt; 2.58 = %99 güvenle sıcak bölge.
-        </div>
-        <button onClick={runHotCell} disabled={loading.hotcell||ilanlar.length<4}
-          style={{padding:'8px 16px',background:ilanlar.length>=4?'#d97706':'#94a3b8',color:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:ilanlar.length>=4?'pointer':'default',marginBottom:8}}>
-          {loading.hotcell?'⏳ Hesaplanıyor...':'🔥 Hot Cell Çalıştır'}
-        </button>
-        {ilanlar.length<4&&<span style={{fontSize:10,color:'#94a3b8',marginLeft:8}}>Min {4-ilanlar.length} ilan daha gerekli</span>}
-        {error.hotcell&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>⚠️ {error.hotcell}</div>}
-        {hotcellSonuc?.basari&&<div style={{marginTop:8}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:8}}>
-            <div style={{background:'#fef3c7',borderRadius:6,padding:'6px 8px',textAlign:'center'}}>
-              <div style={{fontSize:9,color:'#92400e'}}>Toplam Hücre</div>
-              <div style={{fontSize:14,fontWeight:800,color:'#d97706'}}>{hotcellSonuc.toplam_hucre}</div>
-            </div>
-            <div style={{background:'#fef3c7',borderRadius:6,padding:'6px 8px',textAlign:'center'}}>
-              <div style={{fontSize:9,color:'#92400e'}}>🔥 Sıcak (%90)</div>
-              <div style={{fontSize:14,fontWeight:800,color:'#ea580c'}}>{hotcellSonuc.sicak_hucre}</div>
-            </div>
-            <div style={{background:'#fef3c7',borderRadius:6,padding:'6px 8px',textAlign:'center'}}>
-              <div style={{fontSize:9,color:'#92400e'}}>🌋 Çok Sıcak (%99)</div>
-              <div style={{fontSize:14,fontWeight:800,color:'#dc2626'}}>{hotcellSonuc.cok_sicak_hucre}</div>
-            </div>
-          </div>
-          <div style={{fontSize:11,color:'#92400e',background:'#fef3c7',borderRadius:6,padding:'6px 10px',marginBottom:8}}>
-            💡 {hotcellSonuc.yorum}
-          </div>
-          {hotcellSonuc.en_sicak_10?.length>0&&<div>
-            <div style={{fontSize:11,fontWeight:700,color:'#92400e',marginBottom:4}}>En Sıcak 10 Hücre:</div>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
-              <thead><tr style={{background:'#fef3c7'}}>
-                <th style={{padding:'4px 6px',textAlign:'left'}}>Koordinat</th>
-                <th style={{padding:'4px 6px',textAlign:'right'}}>Z-Score</th>
-                <th style={{padding:'4px 6px',textAlign:'right'}}>Ort. Değer</th>
-                <th style={{padding:'4px 6px',textAlign:'right'}}>Nokta</th>
-              </tr></thead>
-              <tbody>
-                {hotcellSonuc.en_sicak_10.map((h,i)=>(
-                  <tr key={i} style={{borderBottom:'1px solid #fde68a'}}>
-                    <td style={{padding:'4px 6px'}}>{h.lat?.toFixed(4)}, {h.lng?.toFixed(4)}</td>
-                    <td style={{padding:'4px 6px',textAlign:'right',fontWeight:700,color:h.zscore>2.58?'#dc2626':h.zscore>1.65?'#ea580c':'#d97706'}}>{h.zscore}</td>
-                    <td style={{padding:'4px 6px',textAlign:'right'}}>{h.deger?.toLocaleString('tr-TR')}</td>
-                    <td style={{padding:'4px 6px',textAlign:'right'}}>{h.nokta_sayisi}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>}
-        </div>}
-        {hotcellSonuc?.basari===false&&<div style={{fontSize:10,color:'#ef4444',marginTop:6}}>{hotcellSonuc.hata}</div>}
-      </div>
-    </div>
-  );
-};
-
-
-// ── Terrain + Landuse Component// ── Terrain + Landuse Component// ── Terrain + Landuse Component ───────────────────────────────────────────
-const TerrainLanduse = ({parcel, apiUrl}) => {
-  const [terrain, setTerrain] = React.useState(null);
-  const [landuse, setLanduse] = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
-  const [radius, setRadius] = React.useState(1000);
-  const loaded = React.useRef(false);
-
-  React.useEffect(() => {
-    if(!parcel?.lat || !parcel?.lng) return;
-    if(loaded.current) return;
-    loaded.current = true;
-    fetchAll();
-  }, [parcel?.id]);
-
-  async function fetchAll() {
-    setLoading(true);
-    try {
-      const [tRes, lRes] = await Promise.allSettled([
-        fetch(apiUrl+'/api/spatial/terrain',{
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({lat:parcel.lat, lng:parcel.lng}),
-          signal:AbortSignal.timeout(20000),
-        }).then(r=>r.json()),
-        fetch(apiUrl+'/api/spatial/landuse',{
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({lat:parcel.lat, lng:parcel.lng, radius}),
-          signal:AbortSignal.timeout(25000),
-        }).then(r=>r.json()),
-      ]);
-      if(tRes.status==='fulfilled') setTerrain(tRes.value?.result);
-      if(lRes.status==='fulfilled') setLanduse(lRes.value?.result);
-    } catch(e) {}
-    setLoading(false);
-  }
-
-  async function refetchLanduse() {
-    setLoading(true);
-    try {
-      const r = await fetch(apiUrl+'/api/spatial/landuse',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({lat:parcel.lat, lng:parcel.lng, radius}),
-        signal:AbortSignal.timeout(25000),
-      });
-      const d = await r.json();
-      setLanduse(d?.result);
-    } catch(e) {}
-    setLoading(false);
-  }
-
-  if(!parcel?.lat) return null;
-
-  return (
-    <div className="card" style={{marginBottom:16}}>
-      <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>🌍 Arazi & Çevre Analizi</div>
-
-      {loading && <div style={{fontSize:12,color:'#64748b',padding:'8px 0'}}>⏳ Yükleniyor...</div>}
-
-      {/* Terrain */}
-      {terrain?.basari && (
-        <div style={{background:'#f0fdf4',borderRadius:10,padding:14,marginBottom:12,border:'1px solid #86efac'}}>
-          <div style={{fontWeight:700,fontSize:13,color:'#166534',marginBottom:10}}>⛰️ Arazi Analizi (Horn Algoritması)</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:8,marginBottom:10}}>
-            {[
-              ['Yükseklik', terrain.merkez_yukseklik+'m', '#166534'],
-              ['Eğim', terrain.egim_derece+'°', terrain.egim_derece>10?'#ef4444':terrain.egim_derece>5?'#f59e0b':'#16a34a'],
-              ['Eğim %', '%'+terrain.egim_yuzde, '#374151'],
-              ['Bakı', terrain.baki_yon, '#374151'],
-            ].map(([l,v,c])=>(
-              <div key={l} style={{background:'#fff',borderRadius:7,padding:'8px 10px',border:'1px solid #dcfce7'}}>
-                <div style={{fontSize:10,color:'#64748b'}}>{l}</div>
-                <div style={{fontSize:14,fontWeight:800,color:c}}>{v}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{fontSize:12,fontWeight:600,color:'#166534',marginBottom:4}}>{terrain.egim_sinif}</div>
-          <div style={{fontSize:11,color:'#374151',marginBottom:6}}>{terrain.insaat_uygunlugu}</div>
-          <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>{terrain.yorum}</div>
-          {terrain.risk_skoru > 0 && (
-            <div style={{marginTop:8,background:'#fee2e2',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#b91c1c'}}>
-              ⚠️ Arazi Risk Skoru: {terrain.risk_skoru}/100
-            </div>
-          )}
-        </div>
-      )}
-      {terrain?.basari===false && (
-        <div style={{fontSize:11,color:'#94a3b8',marginBottom:8}}>⛰️ Yükseklik verisi alınamadı</div>
-      )}
-
-      {/* Landuse */}
-      {landuse?.basari && (
-        <div style={{background:'#f8fafc',borderRadius:10,padding:14,border:'1px solid #e2e8f0'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
-            <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>🗺️ Arazi Kullanımı ({radius}m yarıçap)</div>
-            <div style={{display:'flex',gap:6,alignItems:'center'}}>
-              <select value={radius} onChange={e=>{setRadius(Number(e.target.value));}}
-                style={{fontSize:11,padding:'4px 8px',border:'1px solid #e2e8f0',borderRadius:6}}>
-                {[500,1000,1500,2000,3000].map(r=><option key={r} value={r}>{r}m</option>)}
-              </select>
-              <button onClick={refetchLanduse} style={{fontSize:11,padding:'4px 10px',background:'#2563eb',color:'#fff',border:'none',borderRadius:6,cursor:'pointer'}}>
-                Güncelle
-              </button>
-            </div>
-          </div>
-          <div style={{fontSize:12,color:'#64748b',marginBottom:10}}>
-            Baskın: <b style={{color:'#0f172a'}}>{landuse.baskin_tr}</b>
-          </div>
-
-          {/* Dağılım bar'ları */}
-          <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
-            {Object.entries(landuse.dagilim_tr||{}).slice(0,6).map(([k,v])=>(
-              <div key={k}>
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
-                  <span style={{color:'#374151'}}>{k}</span>
-                  <span style={{fontWeight:600}}>%{v}</span>
-                </div>
-                <div style={{background:'#e2e8f0',borderRadius:4,height:6}}>
-                  <div style={{background:'#2563eb',borderRadius:4,height:6,width:`${Math.min(v,100)}%`,transition:'width .3s'}}/>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Metrik katkısı */}
-          {landuse.metrik_katki && Object.values(landuse.metrik_katki).some(v=>v!==0) && (
-            <div style={{background:'#eff6ff',borderRadius:8,padding:'8px 12px',marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:700,color:'#1d4ed8',marginBottom:6}}>📊 ISDBM Metrik Katkısı</div>
-              <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                {Object.entries(landuse.metrik_katki).filter(([,v])=>v!==0).map(([k,v])=>(
-                  <span key={k} style={{fontSize:10,padding:'2px 8px',borderRadius:12,
-                    background:v>0?'#dcfce7':'#fee2e2',
-                    color:v>0?'#166534':'#b91c1c',fontWeight:600}}>
-                    {k}: {v>0?'+':''}{v}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>{landuse.yorum}</div>
-        </div>
-      )}
-      {landuse?.basari===false && (
-        <div style={{fontSize:11,color:'#94a3b8'}}>🗺️ Arazi kullanım verisi bulunamadı</div>
-      )}
-    </div>
-  );
 };
 
 // ── AI Screen Component ────────────────────────────────────────────────────
@@ -2757,9 +2386,7 @@ ${parcels.map(p=>`- ${p.projeAdi||"İsimsiz"} | ${p.il}/${p.ilce} | Alan: ${p.al
 `:"Henüz kayıtlı parsel yok.";
 
   const systemPrompt=`Sen ISDBM Digital platformunun AI asistanısın. ARGEPLANO şirketi için çalışıyorsun.
-
-## ISDBM Metodolojisi
-6 metrik üzerinden 0-100 arası skor:
+ISDBM (Integrated Site Development & Business Model) metodolojisi: 6 metrik üzerinden 0-100 arası skor:
 - Ulaşım (%20): metro, otoyol, liman, havalimanı erişimi
 - Demografi (%15): nüfus yoğunluğu, büyüme, gelir
 - Ticari Potansiyel (%20): ticaret hacmi, sektör uyumu
@@ -2769,37 +2396,9 @@ ${parcels.map(p=>`- ${p.projeAdi||"İsimsiz"} | ${p.il}/${p.ilce} | Alan: ${p.al
 
 Yatırım alternatifleri: Data Center, Lojistik Merkezi, Teknoloji Kampüsü, Karma Kullanım, AVM, Otel, Konut, Endüstriyel Tesis.
 
-## Mekansal Tasarım Analiz Metodolojisi (Spatial Design Context)
-Parsel analizi yaparken şu adımları izle:
-
-1. PROJE SINIFLANDIRMASI: Parseli şu kriterlere göre sınıflandır:
-   - Ana kullanım alanı: Konut / Ticaret / Sanayi/Lojistik / Karma / Turizm / Kamusal
-   - Müdahale tipi: Yeni inşaat / Dönüşüm / Uyarlamalı yeniden kullanım / Geçici
-   - Ölçek: Parsel (<1ha) / Saha (1-10ha) / Bölge (>10ha)
-   - Aşama: Yer seçimi / Kavram / Çoklu senaryo karşılaştırma / Entegrasyon
-
-2. TEMEL TASARIM SORUSU: Parselin temel çelişkisini ve fırsatını tek cümleyle yaz.
-   Format: "[Nesne] için [kısıt] ile [fırsat] arasındaki dengeyi nasıl kurarız?"
-
-3. SAHA İPUÇLARI: Tasarımı etkileyecek 3-5 kritik faktörü çıkar:
-   - Ulaşım erişimi ve bağlantı
-   - Çevre yapı dokusu ve yoğunluk
-   - Ekolojik koşullar ve riskler
-   - Kullanıcı profili ve talep
-   - Yasal/imar kısıtları
-
-4. ÇOKLU SENARYO: En az 2-3 farklı yatırım yönünü karşılaştır:
-   - Her senaryo için: temel fikir + avantaj + risk + CAPEX tahmini
-   - Senaryolar birbirinden farklı mekansal organizasyon önermelidir
-
-5. ÖNERİ VE GEREKÇELENDİRME:
-   - Önerilen yaklaşım ve neden
-   - Doğrulanması gereken varsayımlar
-   - Bir sonraki adımda yapılacaklar
-
 ${parcelContext}
 
-Türkçe yanıt ver. Analiz yaparken önce sınıflandırmayı yap, sonra temel soruyu yaz, sonra senaryoları karşılaştır. Sayısal verileri (ISDBM skoru, alan, POI sayısı) aktif olarak kullan.`;
+Türkçe yanıt ver. Kısa ve net ol. Sayısal analizlerde somut yorum yap.`;
 
   const sendMessage=async()=>{
     const q=input.trim(); if(!q||loading) return;
@@ -2838,12 +2437,11 @@ Türkçe yanıt ver. Analiz yaparken önce sınıflandırmayı yap, sonra temel 
   };
 
   const QUICK=[
-    "Bu parseli sınıflandır ve temel tasarım sorusunu belirle",
-    "3 farklı yatırım senaryosu karşılaştır — avantaj, risk ve CAPEX ile",
-    "Saha ipuçlarını çıkar — ulaşım, doku, ekoloji, talep, imar",
-    "ISDBM skorumu nasıl artırabilirim? Metrik bazlı öner",
-    "Tüm parselleri karşılaştır ve yatırım öncelik sırası belirle",
-    "Risk faktörlerini analiz et ve azaltma önerileri sun",
+    "En yüksek skorlu parseli analiz et",
+    "Tüm parselleri karşılaştır",
+    "Data Center için hangi parsel uygun?",
+    "Risk skorları düşük parseller hangileri?",
+    "Yatırım öncelik sıramı belirle",
   ];
 
   return <div style={{display:"flex",flexDirection:"column",height:"100%",gap:0}}>
@@ -3541,9 +3139,6 @@ const App=()=>{
             })()}
           </div>}
 
-          {/* Terrain + Landuse */}
-          {p.lat&&p.lng&&<TerrainLanduse parcel={p} apiUrl={BACKEND_URL}/>}
-
           {/* Alternatives */}
           <div className="card">
             <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>🏗️ Yatırım Alternatifleri</div>
@@ -3670,243 +3265,158 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 
 <script>
-// ── View3D Component — Three.js ──────────────────────────────────────────────
-var IMAR_YUK = {'Konut Imarli':35,'Ticaret Imarli':55,'Sanayi Imarli':18,'Lojistik Imarli':15,'Turizm Imarli':45,'Tarim / Imarsiz':6,'Belirsiz':20};
-var IMAR_HEX = {'Konut Imarli':'#2563eb','Ticaret Imarli':'#16a34a','Sanayi Imarli':'#f59e0b','Lojistik Imarli':'#8b5cf6','Turizm Imarli':'#ec4899','Tarim / Imarsiz':'#64748b','Belirsiz':'#94a3b8'};
+// View3D — Three.js, Babel dışında saf JS
+var IMAR_YUK={'Konut Imarli':35,'Ticaret Imarli':55,'Sanayi Imarli':18,'Lojistik Imarli':15,'Turizm Imarli':45,'Tarim / Imarsiz':6,'Belirsiz':20};
+var IMAR_HEX={'Konut Imarli':'#2563eb','Ticaret Imarli':'#16a34a','Sanayi Imarli':'#f59e0b','Lojistik Imarli':'#8b5cf6','Turizm Imarli':'#ec4899','Tarim / Imarsiz':'#64748b','Belirsiz':'#94a3b8'};
 
-function loadThreeJS() {
-  return new Promise(function(res, rej) {
-    if (window.THREE) { res(window.THREE); return; }
-    var s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-    s.onload = function() { res(window.THREE); };
-    s.onerror = rej;
+function loadThreeJS(){
+  return new Promise(function(res,rej){
+    if(window.THREE){res(window.THREE);return;}
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+    s.onload=function(){res(window.THREE);};s.onerror=rej;
     document.head.appendChild(s);
   });
 }
 
-function fetchOSMBldgs(lat, lng) {
-  var q = '[out:json][timeout:15];way["building"](around:400,' + lat + ',' + lng + ');out body;>;out skel qt;';
-  return fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:q})
-    .then(function(r){ return r.json(); })
+function fetchBldgs(lat,lng){
+  var q='[out:json][timeout:15];way["building"](around:400,'+lat+','+lng+');out body;>;out skel qt;';
+  return fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:q})
+    .then(function(r){return r.json();})
     .then(function(d){
-      var nodes = {};
-      d.elements.forEach(function(e){ if(e.type==='node') nodes[e.id]=[e.lat,e.lon]; });
-      return d.elements.filter(function(e){ return e.type==='way'&&e.nodes&&e.nodes.length>2; }).map(function(w){
-        var coords = w.nodes.map(function(id){ return nodes[id]; }).filter(Boolean);
-        var lvl = parseInt((w.tags&&w.tags['building:levels'])||'3');
-        var h = parseInt((w.tags&&w.tags['height'])||String(lvl*3.5));
-        return {id:w.id, coords:coords, height:Math.max(h,4)};
-      }).filter(function(b){ return b.coords.length>2; });
-    })
-    .catch(function(){ return []; });
+      var nodes={};
+      d.elements.forEach(function(e){if(e.type==='node')nodes[e.id]=[e.lat,e.lon];});
+      return d.elements.filter(function(e){return e.type==='way'&&e.nodes&&e.nodes.length>2;}).map(function(w){
+        var coords=w.nodes.map(function(id){return nodes[id];}).filter(Boolean);
+        var h=parseInt((w.tags&&w.tags.height)||String(parseInt((w.tags&&w.tags['building:levels'])||'3')*3.5));
+        return {coords:coords,height:Math.max(h,4)};
+      }).filter(function(b){return b.coords.length>2;});
+    }).catch(function(){return [];});
 }
 
-function hexToInt(hex) { return parseInt(hex.replace('#',''), 16); }
+function hexInt(hex){return parseInt(hex.replace('#',''),16);}
 
-var View3D = function(props) {
-  var parcels  = props.parcels;
-  var onClose  = props.onClose;
-  var mountRef = React.useRef(null);
-  var stateRef = React.useRef({theta:30, phi:55, rCam:180, drag:false, px:0, py:0});
-  var rafRef   = React.useRef(null);
-  var rendRef  = React.useRef(null);
-
-  var statePair   = React.useState('Yükleniyor...');
-  var status      = statePair[0]; var setStatus = statePair[1];
-  var bldPair     = React.useState(0);
-  var bldCount    = bldPair[0]; var setBldCount = bldPair[1];
-  var rotPair     = React.useState(true);
-  var rotating    = rotPair[0]; var setRotating = rotPair[1];
-  var rotRef      = React.useRef(true);
-
-  React.useEffect(function(){ rotRef.current = rotating; }, [rotating]);
+var View3D=function(props){
+  var parcels=props.parcels,onClose=props.onClose;
+  var mountRef=React.useRef(null);
+  var st=React.useRef({theta:30,phi:55,r:180,drag:false,px:0,py:0});
+  var rafRef=React.useRef(null),rendRef=React.useRef(null),rotRef=React.useRef(true);
+  var sp=React.useState('Yükleniyor...'),status=sp[0],setStatus=sp[1];
+  var bc=React.useState(0),bldCount=bc[0],setBldCount=bc[1];
+  var rp=React.useState(true),rotating=rp[0],setRotating=rp[1];
+  React.useEffect(function(){rotRef.current=rotating;},[rotating]);
 
   React.useEffect(function(){
-    var THREE, renderer, camera, scene;
-    var el;
-
+    var THREE,renderer,camera,scene;
     loadThreeJS().then(function(T){
-      THREE = T;
-      var w = mountRef.current.clientWidth;
-      var h = mountRef.current.clientHeight;
-
-      scene    = new THREE.Scene();
-      scene.background = new THREE.Color(0x0f172a);
-      scene.fog = new THREE.Fog(0x0f172a, 400, 900);
-
-      camera   = new THREE.PerspectiveCamera(55, w/h, 0.1, 2000);
-
-      renderer = new THREE.WebGLRenderer({antialias:true});
-      renderer.setSize(w, h);
-      renderer.shadowMap.enabled = true;
-      rendRef.current = renderer;
+      THREE=T;
+      var w=mountRef.current.clientWidth,h=mountRef.current.clientHeight;
+      scene=new THREE.Scene();
+      scene.background=new THREE.Color(0x0f172a);
+      scene.fog=new THREE.Fog(0x0f172a,400,900);
+      camera=new THREE.PerspectiveCamera(55,w/h,0.1,2000);
+      renderer=new THREE.WebGLRenderer({antialias:true});
+      renderer.setSize(w,h);
+      renderer.shadowMap.enabled=true;
+      rendRef.current=renderer;
       mountRef.current.appendChild(renderer.domElement);
-      el = renderer.domElement;
-
-      // Işık
-      scene.add(new THREE.AmbientLight(0x334155, 0.9));
-      var sun = new THREE.DirectionalLight(0xffffff, 1.1);
-      sun.position.set(80, 200, 80);
-      sun.castShadow = true;
-      scene.add(sun);
-      var fill = new THREE.DirectionalLight(0x3b82f6, 0.25);
-      fill.position.set(-80, 60, -80);
-      scene.add(fill);
-
-      // Grid + zemin
-      scene.add(new THREE.GridHelper(400, 40, 0x1e3a5f, 0x1e293b));
-      var gnd = new THREE.Mesh(
-        new THREE.PlaneGeometry(400,400),
-        new THREE.MeshLambertMaterial({color:0x0f172a})
-      );
-      gnd.rotation.x = -Math.PI/2;
-      gnd.receiveShadow = true;
-      scene.add(gnd);
-
-      var cPar = parcels[0];
-      var cLat = (cPar&&cPar.lat) ? cPar.lat : 41.0;
-      var cLng = (cPar&&cPar.lng) ? cPar.lng : 29.0;
-      var SC = 80000;
-
-      // Parseller
+      scene.add(new THREE.AmbientLight(0x334155,0.9));
+      var sun=new THREE.DirectionalLight(0xffffff,1.1);
+      sun.position.set(80,200,80);sun.castShadow=true;scene.add(sun);
+      scene.add(new THREE.GridHelper(400,40,0x1e3a5f,0x1e293b));
+      var gnd=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshLambertMaterial({color:0x0f172a}));
+      gnd.rotation.x=-Math.PI/2;gnd.receiveShadow=true;scene.add(gnd);
+      var cP=parcels[0],cLat=cP&&cP.lat?cP.lat:41.0,cLng=cP&&cP.lng?cP.lng:29.0,SC=80000;
       parcels.forEach(function(p){
-        var h3d = IMAR_YUK[p.planDurumu]||20;
-        var col = hexToInt(IMAR_HEX[p.planDurumu]||'#2563eb');
-        var mat = new THREE.MeshLambertMaterial({color:col, transparent:true, opacity:0.88});
-
-        if (p.coordinates && p.coordinates.length >= 3) {
-          try {
-            var pts = p.coordinates.map(function(c){
-              return new THREE.Vector2((c[1]-cLng)*SC, (c[0]-cLat)*SC);
-            });
-            var shape = new THREE.Shape(pts);
-            var geo = new THREE.ExtrudeGeometry(shape, {depth:h3d, bevelEnabled:false});
+        var h3d=IMAR_YUK[p.planDurumu]||20,col=hexInt(IMAR_HEX[p.planDurumu]||'#2563eb');
+        var mat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.88});
+        if(p.coordinates&&p.coordinates.length>=3){
+          try{
+            var pts=p.coordinates.map(function(c){return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC);});
+            var shape=new THREE.Shape(pts);
+            var geo=new THREE.ExtrudeGeometry(shape,{depth:h3d,bevelEnabled:false});
             geo.rotateX(-Math.PI/2);
-            var mesh = new THREE.Mesh(geo, mat);
-            mesh.castShadow = true;
-            scene.add(mesh);
-            var edgeGeo = new THREE.EdgesGeometry(geo);
-            scene.add(new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.35})));
-          } catch(e){}
-        } else if (p.lat && p.lng) {
-          var x = (p.lng-cLng)*SC;
-          var z = (p.lat-cLat)*SC;
-          var cyl = new THREE.Mesh(new THREE.CylinderGeometry(3,3,h3d,8), mat);
-          cyl.position.set(x, h3d/2, z);
-          cyl.castShadow = true;
-          scene.add(cyl);
-          var pin = new THREE.Mesh(new THREE.SphereGeometry(4,8,8), new THREE.MeshLambertMaterial({color:0xfbbf24}));
-          pin.position.set(x, h3d+5, z);
-          scene.add(pin);
+            var mesh=new THREE.Mesh(geo,mat);mesh.castShadow=true;scene.add(mesh);
+            scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.3})));
+          }catch(e){}
+        }else if(p.lat&&p.lng){
+          var x=(p.lng-cLng)*SC,z=(p.lat-cLat)*SC;
+          var cyl=new THREE.Mesh(new THREE.CylinderGeometry(3,3,h3d,8),mat);
+          cyl.position.set(x,h3d/2,z);scene.add(cyl);
+          var pin=new THREE.Mesh(new THREE.SphereGeometry(4,8,8),new THREE.MeshLambertMaterial({color:0xfbbf24}));
+          pin.position.set(x,h3d+5,z);scene.add(pin);
         }
       });
-
-      setStatus('Çevre binalar yükleniyor...');
-
-      var bldPromise = (cPar&&cPar.lat&&cPar.lng) ? fetchOSMBldgs(cLat, cLng) : Promise.resolve([]);
-
-      bldPromise.then(function(blds){
+      setStatus('Çevre binalar...');
+      var bP=cP&&cP.lat&&cP.lng?fetchBldgs(cLat,cLng):Promise.resolve([]);
+      bP.then(function(blds){
         setBldCount(blds.length);
         blds.forEach(function(b){
-          try {
-            var pts = b.coords.map(function(c){ return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC); });
-            if (pts.length<3) return;
-            var shape = new THREE.Shape(pts);
-            var geo = new THREE.ExtrudeGeometry(shape, {depth:Math.min(b.height,100), bevelEnabled:false});
+          try{
+            var pts=b.coords.map(function(c){return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC);});
+            if(pts.length<3)return;
+            var geo=new THREE.ExtrudeGeometry(new THREE.Shape(pts),{depth:Math.min(b.height,100),bevelEnabled:false});
             geo.rotateX(-Math.PI/2);
-            scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({color:0x1e3a5f,transparent:true,opacity:0.7})));
-          } catch(e){}
+            scene.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x1e3a5f,transparent:true,opacity:0.7})));
+          }catch(e){}
         });
         setStatus('');
       });
-
-      // Kontroller
-      el.addEventListener('mousedown', function(e){ stateRef.current.drag=true; stateRef.current.px=e.clientX; stateRef.current.py=e.clientY; });
-      el.addEventListener('mouseup',   function(){ stateRef.current.drag=false; });
-      el.addEventListener('mouseleave',function(){ stateRef.current.drag=false; });
-      el.addEventListener('mousemove', function(e){
-        if(!stateRef.current.drag) return;
-        stateRef.current.theta -= (e.clientX-stateRef.current.px)*0.35;
-        stateRef.current.phi    = Math.max(10, Math.min(80, stateRef.current.phi-(e.clientY-stateRef.current.py)*0.35));
-        stateRef.current.px=e.clientX; stateRef.current.py=e.clientY;
+      var el=renderer.domElement;
+      el.addEventListener('mousedown',function(e){st.current.drag=true;st.current.px=e.clientX;st.current.py=e.clientY;});
+      el.addEventListener('mouseup',function(){st.current.drag=false;});
+      el.addEventListener('mouseleave',function(){st.current.drag=false;});
+      el.addEventListener('mousemove',function(e){
+        if(!st.current.drag)return;
+        st.current.theta-=(e.clientX-st.current.px)*0.35;
+        st.current.phi=Math.max(10,Math.min(80,st.current.phi-(e.clientY-st.current.py)*0.35));
+        st.current.px=e.clientX;st.current.py=e.clientY;
       });
-      el.addEventListener('wheel', function(e){
-        stateRef.current.rCam = Math.max(50, Math.min(500, stateRef.current.rCam+e.deltaY*0.2));
-        e.preventDefault();
-      },{passive:false});
+      el.addEventListener('wheel',function(e){st.current.r=Math.max(50,Math.min(500,st.current.r+e.deltaY*0.2));e.preventDefault();},{passive:false});
       var lt=null;
-      el.addEventListener('touchstart', function(e){ lt=e.touches[0]; },{passive:true});
-      el.addEventListener('touchmove',  function(e){
-        if(!lt) return;
-        stateRef.current.theta -= (e.touches[0].clientX-lt.clientX)*0.5;
-        stateRef.current.phi    = Math.max(10,Math.min(80,stateRef.current.phi-(e.touches[0].clientY-lt.clientY)*0.5));
-        lt=e.touches[0]; e.preventDefault();
+      el.addEventListener('touchstart',function(e){lt=e.touches[0];},{passive:true});
+      el.addEventListener('touchmove',function(e){
+        if(!lt)return;
+        st.current.theta-=(e.touches[0].clientX-lt.clientX)*0.5;
+        st.current.phi=Math.max(10,Math.min(80,st.current.phi-(e.touches[0].clientY-lt.clientY)*0.5));
+        lt=e.touches[0];e.preventDefault();
       },{passive:false});
-
       function animate(){
-        rafRef.current = requestAnimationFrame(animate);
-        if(rotRef.current && !stateRef.current.drag) stateRef.current.theta += 0.12;
-        var t=stateRef.current.theta*Math.PI/180;
-        var p=stateRef.current.phi*Math.PI/180;
-        var r=stateRef.current.rCam;
-        camera.position.set(r*Math.sin(t)*Math.cos(p), r*Math.sin(p), r*Math.cos(t)*Math.cos(p));
-        camera.lookAt(0,15,0);
-        renderer.render(scene,camera);
+        rafRef.current=requestAnimationFrame(animate);
+        if(rotRef.current&&!st.current.drag)st.current.theta+=0.12;
+        var t=st.current.theta*Math.PI/180,p=st.current.phi*Math.PI/180,r=st.current.r;
+        camera.position.set(r*Math.sin(t)*Math.cos(p),r*Math.sin(p),r*Math.cos(t)*Math.cos(p));
+        camera.lookAt(0,15,0);renderer.render(scene,camera);
       }
       animate();
-
-      window.addEventListener('resize', function(){
-        if(!mountRef.current) return;
-        var nw=mountRef.current.clientWidth, nh=mountRef.current.clientHeight;
-        camera.aspect=nw/nh; camera.updateProjectionMatrix();
-        renderer.setSize(nw,nh);
-      });
-
-    }).catch(function(e){ setStatus('Hata: '+e.message); });
-
+    }).catch(function(e){setStatus('Hata: '+e.message);});
     return function(){
       cancelAnimationFrame(rafRef.current);
-      if(rendRef.current && mountRef.current){
-        try{ mountRef.current.removeChild(rendRef.current.domElement); }catch(e){}
+      if(rendRef.current&&mountRef.current){
+        try{mountRef.current.removeChild(rendRef.current.domElement);}catch(e){}
         rendRef.current.dispose();
       }
     };
-  }, []);
+  },[]);
 
-  return (
-    React.createElement('div', {style:{position:'relative',width:'100%',height:'100%',background:'#0f172a',overflow:'hidden'}},
-      React.createElement('div', {ref:mountRef, style:{width:'100%',height:'100%'}}),
-
-      status ? React.createElement('div', {style:{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',color:'#fff',fontSize:14,textAlign:'center',pointerEvents:'none'}},
-        React.createElement('div', {style:{fontSize:36,marginBottom:12}}, '🏙️'),
-        React.createElement('div', {style:{fontWeight:600}}, status)
-      ) : null,
-
-      React.createElement('div', {style:{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}},
-        React.createElement('button', {onClick:onClose, style:{background:'rgba(15,23,42,.9)',color:'#fff',border:'1px solid #334155',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}}, '← 2D Harita'),
-        React.createElement('button', {onClick:function(){setRotating(function(r){return !r;});}, style:{background:'rgba(15,23,42,.9)',color:rotating?'#fbbf24':'#64748b',border:'1px solid #334155',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}}, rotating?'⏸ Durdur':'▶ Döndür'),
-        React.createElement('div', {style:{background:'rgba(15,23,42,.85)',border:'1px solid #334155',borderRadius:8,padding:'10px 12px'}},
-          React.createElement('div', {style:{fontSize:10,fontWeight:700,color:'#e2e8f0',marginBottom:6}}, 'Lejant'),
-          Object.entries(IMAR_HEX).map(function(entry){
-            return React.createElement('div', {key:entry[0], style:{display:'flex',alignItems:'center',gap:5,marginBottom:3}},
-              React.createElement('div', {style:{width:8,height:8,borderRadius:2,background:entry[1],flexShrink:0}}),
-              React.createElement('span', {style:{fontSize:10,color:'#94a3b8'}}, entry[0].replace(' Imarli','').replace(' / Imarsiz','')),
-              React.createElement('span', {style:{fontSize:10,color:'#475569',marginLeft:'auto'}}, IMAR_YUK[entry[0]]+'m')
-            );
-          })
-        )
-      ),
-
-      React.createElement('div', {style:{position:'absolute',bottom:16,left:12,zIndex:10,background:'rgba(15,23,42,.9)',border:'1px solid #334155',borderRadius:10,padding:14,minWidth:200}},
-        React.createElement('div', {style:{fontSize:10,color:'#64748b',fontWeight:600,marginBottom:6}}, '3D GÖRÜNÜM'),
-        parcels[0] ? React.createElement('div', null,
-          React.createElement('div', {style:{fontSize:13,fontWeight:700,color:'#fff',marginBottom:2}}, parcels[0].projeAdi||'İsimsiz'),
-          React.createElement('div', {style:{fontSize:11,color:'#94a3b8'}}, (parcels[0].il||'?')+' / '+(parcels[0].ilce||'?'))
-        ) : null,
-        React.createElement('div', {style:{marginTop:8,fontSize:10,color:'#475569'}}, '🏗️ '+parcels.length+' parsel · 🏘️ '+bldCount+' bina'),
-        React.createElement('div', {style:{marginTop:4,fontSize:10,color:'#334155'}}, 'Sürükle: döndür · Scroll: zoom')
-      )
+  return React.createElement('div',{style:{position:'relative',width:'100%',height:'100%',background:'#0f172a',overflow:'hidden'}},
+    React.createElement('div',{ref:mountRef,style:{width:'100%',height:'100%'}}),
+    status?React.createElement('div',{style:{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',color:'#fff',fontSize:14,textAlign:'center',pointerEvents:'none'}},
+      React.createElement('div',{style:{fontSize:36,marginBottom:12}},'🏙️'),
+      React.createElement('div',{style:{fontWeight:600}},status)
+    ):null,
+    React.createElement('div',{style:{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}},
+      React.createElement('button',{onClick:onClose,style:{background:'rgba(15,23,42,.9)',color:'#fff',border:'1px solid #334155',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},'← 2D Harita'),
+      React.createElement('button',{onClick:function(){setRotating(function(r){return !r;});},style:{background:'rgba(15,23,42,.9)',color:rotating?'#fbbf24':'#64748b',border:'1px solid #334155',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},rotating?'⏸ Durdur':'▶ Döndür')
+    ),
+    React.createElement('div',{style:{position:'absolute',bottom:16,left:12,zIndex:10,background:'rgba(15,23,42,.9)',border:'1px solid #334155',borderRadius:10,padding:14,minWidth:180}},
+      React.createElement('div',{style:{fontSize:10,color:'#64748b',fontWeight:600,marginBottom:6}},'3D GÖRÜNÜM'),
+      parcels[0]?React.createElement('div',null,
+        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#fff',marginBottom:2}},parcels[0].projeAdi||'İsimsiz'),
+        React.createElement('div',{style:{fontSize:11,color:'#94a3b8'}},(parcels[0].il||'?')+' / '+(parcels[0].ilce||'?'))
+      ):null,
+      React.createElement('div',{style:{marginTop:8,fontSize:10,color:'#475569'}},'🏗️ '+parcels.length+' parsel · 🏘️ '+bldCount+' bina'),
+      React.createElement('div',{style:{marginTop:4,fontSize:10,color:'#334155'}},'Sürükle: döndür · Scroll: zoom')
     )
   );
 };
