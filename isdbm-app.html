@@ -2594,316 +2594,247 @@ const BackendSpatial=({ilanlar,parcel})=>{
 };
 
 // ── View3D Component — Three.js ──────────────────────────────────────────────
-const IMAR_YUKSEKLIK = {
-  'Konut Imarli':    35, 'Ticaret Imarli': 55, 'Sanayi Imarli': 18,
-  'Lojistik Imarli': 15, 'Turizm Imarli':  45, 'Tarim / Imarsiz': 6, 'Belirsiz': 20,
-};
-const IMAR_RENK_HEX = {
-  'Konut Imarli':'#2563eb','Ticaret Imarli':'#16a34a','Sanayi Imarli':'#f59e0b',
-  'Lojistik Imarli':'#8b5cf6','Turizm Imarli':'#ec4899','Tarim / Imarsiz':'#64748b','Belirsiz':'#94a3b8',
-};
+var IMAR_YUK = {'Konut Imarli':35,'Ticaret Imarli':55,'Sanayi Imarli':18,'Lojistik Imarli':15,'Turizm Imarli':45,'Tarim / Imarsiz':6,'Belirsiz':20};
+var IMAR_HEX = {'Konut Imarli':'#2563eb','Ticaret Imarli':'#16a34a','Sanayi Imarli':'#f59e0b','Lojistik Imarli':'#8b5cf6','Turizm Imarli':'#ec4899','Tarim / Imarsiz':'#64748b','Belirsiz':'#94a3b8'};
 
-async function loadThree() {
-  if (window.THREE) return window.THREE;
-  return new Promise((res, rej) => {
-    const s = document.createElement('script');
+function loadThreeJS() {
+  return new Promise(function(res, rej) {
+    if (window.THREE) { res(window.THREE); return; }
+    var s = document.createElement('script');
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-    s.onload = () => res(window.THREE);
+    s.onload = function() { res(window.THREE); };
     s.onerror = rej;
     document.head.appendChild(s);
   });
 }
 
-async function fetchOSMBuildings(lat, lng, radius=400) {
-  const query = `[out:json][timeout:15];way["building"](around:${radius},${lat},${lng});out body;>;out skel qt;`;
-  try {
-    const r = await fetch('https://overpass-api.de/api/interpreter',{
-      method:'POST', body: query, signal: AbortSignal.timeout(15000)
-    });
-    const d = await r.json();
-    const nodes = {};
-    d.elements.filter(e=>e.type==='node').forEach(n=>{nodes[n.id]=[n.lat,n.lon];});
-    return d.elements.filter(e=>e.type==='way'&&e.nodes&&e.nodes.length>2).map(w=>({
-      id: w.id,
-      coords: w.nodes.map(id=>nodes[id]).filter(Boolean),
-      height: parseInt(w.tags?.height||String(parseInt(w.tags?.['building:levels']||'3')*3.5)),
-      type: w.tags?.building||'yes',
-    })).filter(b=>b.coords.length>2);
-  } catch(e){ return []; }
+function fetchOSMBldgs(lat, lng) {
+  var q = '[out:json][timeout:15];way["building"](around:400,' + lat + ',' + lng + ');out body;>;out skel qt;';
+  return fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:q})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var nodes = {};
+      d.elements.forEach(function(e){ if(e.type==='node') nodes[e.id]=[e.lat,e.lon]; });
+      return d.elements.filter(function(e){ return e.type==='way'&&e.nodes&&e.nodes.length>2; }).map(function(w){
+        var coords = w.nodes.map(function(id){ return nodes[id]; }).filter(Boolean);
+        var lvl = parseInt((w.tags&&w.tags['building:levels'])||'3');
+        var h = parseInt((w.tags&&w.tags['height'])||String(lvl*3.5));
+        return {id:w.id, coords:coords, height:Math.max(h,4)};
+      }).filter(function(b){ return b.coords.length>2; });
+    })
+    .catch(function(){ return []; });
 }
 
-const View3D = ({parcels, onClose}) => {
-  const mountRef    = React.useRef(null);
-  const sceneRef    = React.useRef(null);
-  const [status, setStatus]     = React.useState('Yükleniyor...');
-  const [bldCount, setBldCount] = React.useState(0);
-  const [selected, setSelected] = React.useState(parcels[0]||null);
-  const [rotating, setRotating] = React.useState(true);
+function hexToInt(hex) { return parseInt(hex.replace('#',''), 16); }
 
-  React.useEffect(() => {
-    let animId, renderer, scene, camera, controls;
-    let isDragging=false, prevMouse={x:0,y:0};
-    let theta=30, phi=60, radius_cam=200;
+var View3D = function(props) {
+  var parcels  = props.parcels;
+  var onClose  = props.onClose;
+  var mountRef = React.useRef(null);
+  var stateRef = React.useRef({theta:30, phi:55, rCam:180, drag:false, px:0, py:0});
+  var rafRef   = React.useRef(null);
+  var rendRef  = React.useRef(null);
 
-    async function init() {
-      const THREE = await loadThree().catch(e=>{setStatus('Three.js yüklenemedi: '+e.message);return null;});
-      if (!THREE) return;
+  var statePair   = React.useState('Yükleniyor...');
+  var status      = statePair[0]; var setStatus = statePair[1];
+  var bldPair     = React.useState(0);
+  var bldCount    = bldPair[0]; var setBldCount = bldPair[1];
+  var rotPair     = React.useState(true);
+  var rotating    = rotPair[0]; var setRotating = rotPair[1];
+  var rotRef      = React.useRef(true);
 
-      // Scene
-      scene = new THREE.Scene();
+  React.useEffect(function(){ rotRef.current = rotating; }, [rotating]);
+
+  React.useEffect(function(){
+    var THREE, renderer, camera, scene;
+    var el;
+
+    loadThreeJS().then(function(T){
+      THREE = T;
+      var w = mountRef.current.clientWidth;
+      var h = mountRef.current.clientHeight;
+
+      scene    = new THREE.Scene();
       scene.background = new THREE.Color(0x0f172a);
-      scene.fog = new THREE.Fog(0x0f172a, 300, 800);
-      sceneRef.current = scene;
+      scene.fog = new THREE.Fog(0x0f172a, 400, 900);
 
-      // Camera
-      const w = mountRef.current.clientWidth;
-      const h = mountRef.current.clientHeight;
-      camera = new THREE.PerspectiveCamera(60, w/h, 0.1, 2000);
+      camera   = new THREE.PerspectiveCamera(55, w/h, 0.1, 2000);
 
-      // Renderer
       renderer = new THREE.WebGLRenderer({antialias:true});
       renderer.setSize(w, h);
       renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      rendRef.current = renderer;
       mountRef.current.appendChild(renderer.domElement);
+      el = renderer.domElement;
 
-      // Işıklar
-      const ambient = new THREE.AmbientLight(0x334155, 0.8);
-      scene.add(ambient);
-      const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-      sun.position.set(100, 200, 100);
+      // Işık
+      scene.add(new THREE.AmbientLight(0x334155, 0.9));
+      var sun = new THREE.DirectionalLight(0xffffff, 1.1);
+      sun.position.set(80, 200, 80);
       sun.castShadow = true;
       scene.add(sun);
-      const fill = new THREE.DirectionalLight(0x3b82f6, 0.3);
-      fill.position.set(-100, 50, -100);
+      var fill = new THREE.DirectionalLight(0x3b82f6, 0.25);
+      fill.position.set(-80, 60, -80);
       scene.add(fill);
 
-      // Zemin grid
-      const gridH = new THREE.GridHelper(400, 40, 0x1e3a5f, 0x1e293b);
-      scene.add(gridH);
-      const groundGeo = new THREE.PlaneGeometry(400, 400);
-      const groundMat = new THREE.MeshLambertMaterial({color:0x0f172a});
-      const ground = new THREE.Mesh(groundGeo, groundMat);
-      ground.rotation.x = -Math.PI/2;
-      ground.receiveShadow = true;
-      scene.add(ground);
+      // Grid + zemin
+      scene.add(new THREE.GridHelper(400, 40, 0x1e3a5f, 0x1e293b));
+      var gnd = new THREE.Mesh(
+        new THREE.PlaneGeometry(400,400),
+        new THREE.MeshLambertMaterial({color:0x0f172a})
+      );
+      gnd.rotation.x = -Math.PI/2;
+      gnd.receiveShadow = true;
+      scene.add(gnd);
 
-      // Merkez parsel
-      const centerPar = selected || parcels[0];
-      const centerLat = centerPar?.lat || 41.0;
-      const centerLng = centerPar?.lng || 29.0;
-      const SCALE = 100000; // 1 derece = 100000 birim
+      var cPar = parcels[0];
+      var cLat = (cPar&&cPar.lat) ? cPar.lat : 41.0;
+      var cLng = (cPar&&cPar.lng) ? cPar.lng : 29.0;
+      var SC = 80000;
 
-      // Parselleri çiz
-      parcels.forEach(p => {
-        if (!p.coordinates || p.coordinates.length < 3) {
-          // Koordinat yoksa pin ekle
-          if (!p.lat || !p.lng) return;
-          const x = (p.lng - centerLng) * SCALE;
-          const z = (p.lat - centerLat) * SCALE;
-          const h = IMAR_YUKSEKLIK[p.planDurumu]||20;
-          const color = parseInt((IMAR_RENK_HEX[p.planDurumu]||'#2563eb').replace('#',''), 16);
-          const geo = new THREE.CylinderGeometry(3, 3, h, 8);
-          const mat = new THREE.MeshLambertMaterial({color, transparent:true, opacity:0.85});
-          const mesh = new THREE.Mesh(geo, mat);
-          mesh.position.set(x, h/2, z);
-          mesh.castShadow = true;
-          scene.add(mesh);
+      // Parseller
+      parcels.forEach(function(p){
+        var h3d = IMAR_YUK[p.planDurumu]||20;
+        var col = hexToInt(IMAR_HEX[p.planDurumu]||'#2563eb');
+        var mat = new THREE.MeshLambertMaterial({color:col, transparent:true, opacity:0.88});
 
-          // Label pin
-          const pinGeo = new THREE.SphereGeometry(4, 8, 8);
-          const pinMat = new THREE.MeshLambertMaterial({color: 0xfbbf24});
-          const pin = new THREE.Mesh(pinGeo, pinMat);
-          pin.position.set(x, h+5, z);
+        if (p.coordinates && p.coordinates.length >= 3) {
+          try {
+            var pts = p.coordinates.map(function(c){
+              return new THREE.Vector2((c[1]-cLng)*SC, (c[0]-cLat)*SC);
+            });
+            var shape = new THREE.Shape(pts);
+            var geo = new THREE.ExtrudeGeometry(shape, {depth:h3d, bevelEnabled:false});
+            geo.rotateX(-Math.PI/2);
+            var mesh = new THREE.Mesh(geo, mat);
+            mesh.castShadow = true;
+            scene.add(mesh);
+            var edgeGeo = new THREE.EdgesGeometry(geo);
+            scene.add(new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.35})));
+          } catch(e){}
+        } else if (p.lat && p.lng) {
+          var x = (p.lng-cLng)*SC;
+          var z = (p.lat-cLat)*SC;
+          var cyl = new THREE.Mesh(new THREE.CylinderGeometry(3,3,h3d,8), mat);
+          cyl.position.set(x, h3d/2, z);
+          cyl.castShadow = true;
+          scene.add(cyl);
+          var pin = new THREE.Mesh(new THREE.SphereGeometry(4,8,8), new THREE.MeshLambertMaterial({color:0xfbbf24}));
+          pin.position.set(x, h3d+5, z);
           scene.add(pin);
-          return;
         }
-
-        // Polygon ekstrüzyon
-        const h = IMAR_YUKSEKLIK[p.planDurumu]||20;
-        const color = parseInt((IMAR_RENK_HEX[p.planDurumu]||'#2563eb').replace('#',''), 16);
-
-        const pts2D = p.coordinates.map(([lat,lng]) => new THREE.Vector2(
-          (lng - centerLng) * SCALE,
-          (lat - centerLat) * SCALE
-        ));
-
-        try {
-          const shape = new THREE.Shape(pts2D);
-          const extGeo = new THREE.ExtrudeGeometry(shape, {
-            depth: h, bevelEnabled: false,
-          });
-          // ExtrudeGeometry XY düzleminde — XZ'ye döndür
-          extGeo.rotateX(-Math.PI/2);
-          const mat = new THREE.MeshLambertMaterial({color, transparent:true, opacity:0.85});
-          const mesh = new THREE.Mesh(extGeo, mat);
-          mesh.castShadow = true;
-          scene.add(mesh);
-
-          // Kenar çizgisi
-          const edgeMat = new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.4});
-          const edgeGeo = new THREE.EdgesGeometry(extGeo);
-          scene.add(new THREE.LineSegments(edgeGeo, edgeMat));
-        } catch(e){}
       });
 
       setStatus('Çevre binalar yükleniyor...');
 
-      // OSM binalar
-      if (centerPar?.lat && centerPar?.lng) {
-        const blds = await fetchOSMBuildings(centerLat, centerLng);
+      var bldPromise = (cPar&&cPar.lat&&cPar.lng) ? fetchOSMBldgs(cLat, cLng) : Promise.resolve([]);
+
+      bldPromise.then(function(blds){
         setBldCount(blds.length);
-        blds.forEach(b => {
-          const pts2D = b.coords.map(([lat,lng]) => new THREE.Vector2(
-            (lng - centerLng) * SCALE,
-            (lat - centerLat) * SCALE
-          ));
-          if (pts2D.length < 3) return;
-          const h = Math.min(Math.max(b.height||10, 4), 120);
+        blds.forEach(function(b){
           try {
-            const shape = new THREE.Shape(pts2D);
-            const extGeo = new THREE.ExtrudeGeometry(shape, {depth:h, bevelEnabled:false});
-            extGeo.rotateX(-Math.PI/2);
-            const mat = new THREE.MeshLambertMaterial({color:0x1e3a5f, transparent:true, opacity:0.75});
-            const mesh = new THREE.Mesh(extGeo, mat);
-            scene.add(mesh);
+            var pts = b.coords.map(function(c){ return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC); });
+            if (pts.length<3) return;
+            var shape = new THREE.Shape(pts);
+            var geo = new THREE.ExtrudeGeometry(shape, {depth:Math.min(b.height,100), bevelEnabled:false});
+            geo.rotateX(-Math.PI/2);
+            scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({color:0x1e3a5f,transparent:true,opacity:0.7})));
           } catch(e){}
         });
-      }
-
-      setStatus('');
-
-      // Mouse kontrolü
-      const el = renderer.domElement;
-      el.addEventListener('mousedown', e=>{isDragging=true; prevMouse={x:e.clientX,y:e.clientY};});
-      el.addEventListener('mouseup', ()=>isDragging=false);
-      el.addEventListener('mousemove', e=>{
-        if(!isDragging) return;
-        const dx=e.clientX-prevMouse.x, dy=e.clientY-prevMouse.y;
-        theta -= dx*0.3; phi = Math.max(10, Math.min(80, phi-dy*0.3));
-        prevMouse={x:e.clientX,y:e.clientY};
+        setStatus('');
       });
-      el.addEventListener('wheel', e=>{
-        radius_cam = Math.max(50, Math.min(500, radius_cam+e.deltaY*0.2));
+
+      // Kontroller
+      el.addEventListener('mousedown', function(e){ stateRef.current.drag=true; stateRef.current.px=e.clientX; stateRef.current.py=e.clientY; });
+      el.addEventListener('mouseup',   function(){ stateRef.current.drag=false; });
+      el.addEventListener('mouseleave',function(){ stateRef.current.drag=false; });
+      el.addEventListener('mousemove', function(e){
+        if(!stateRef.current.drag) return;
+        stateRef.current.theta -= (e.clientX-stateRef.current.px)*0.35;
+        stateRef.current.phi    = Math.max(10, Math.min(80, stateRef.current.phi-(e.clientY-stateRef.current.py)*0.35));
+        stateRef.current.px=e.clientX; stateRef.current.py=e.clientY;
+      });
+      el.addEventListener('wheel', function(e){
+        stateRef.current.rCam = Math.max(50, Math.min(500, stateRef.current.rCam+e.deltaY*0.2));
         e.preventDefault();
-      }, {passive:false});
-      // Touch
-      let lastTouch=null;
-      el.addEventListener('touchstart', e=>{lastTouch=e.touches[0];});
-      el.addEventListener('touchmove', e=>{
-        if(!lastTouch) return;
-        const dx=e.touches[0].clientX-lastTouch.clientX;
-        const dy=e.touches[0].clientY-lastTouch.clientY;
-        theta-=dx*0.5; phi=Math.max(10,Math.min(80,phi-dy*0.5));
-        lastTouch=e.touches[0]; e.preventDefault();
+      },{passive:false});
+      var lt=null;
+      el.addEventListener('touchstart', function(e){ lt=e.touches[0]; },{passive:true});
+      el.addEventListener('touchmove',  function(e){
+        if(!lt) return;
+        stateRef.current.theta -= (e.touches[0].clientX-lt.clientX)*0.5;
+        stateRef.current.phi    = Math.max(10,Math.min(80,stateRef.current.phi-(e.touches[0].clientY-lt.clientY)*0.5));
+        lt=e.touches[0]; e.preventDefault();
       },{passive:false});
 
-      // Animate
-      let autoTheta = 0;
-      function animate() {
-        animId = requestAnimationFrame(animate);
-        if (!isDragging && rotating) { theta += 0.15; }
-        const tRad = theta*Math.PI/180, pRad = phi*Math.PI/180;
-        camera.position.set(
-          radius_cam*Math.sin(tRad)*Math.cos(pRad),
-          radius_cam*Math.sin(pRad),
-          radius_cam*Math.cos(tRad)*Math.cos(pRad)
-        );
-        camera.lookAt(0, 20, 0);
-        renderer.render(scene, camera);
+      function animate(){
+        rafRef.current = requestAnimationFrame(animate);
+        if(rotRef.current && !stateRef.current.drag) stateRef.current.theta += 0.12;
+        var t=stateRef.current.theta*Math.PI/180;
+        var p=stateRef.current.phi*Math.PI/180;
+        var r=stateRef.current.rCam;
+        camera.position.set(r*Math.sin(t)*Math.cos(p), r*Math.sin(p), r*Math.cos(t)*Math.cos(p));
+        camera.lookAt(0,15,0);
+        renderer.render(scene,camera);
       }
       animate();
 
-      // Resize
-      window.addEventListener('resize', ()=>{
+      window.addEventListener('resize', function(){
         if(!mountRef.current) return;
-        const w=mountRef.current.clientWidth, h=mountRef.current.clientHeight;
-        camera.aspect=w/h; camera.updateProjectionMatrix();
-        renderer.setSize(w,h);
+        var nw=mountRef.current.clientWidth, nh=mountRef.current.clientHeight;
+        camera.aspect=nw/nh; camera.updateProjectionMatrix();
+        renderer.setSize(nw,nh);
       });
-    }
 
-    init();
-    return () => {
-      cancelAnimationFrame(animId);
-      if (renderer) { renderer.dispose(); if(mountRef.current&&renderer.domElement) mountRef.current.removeChild(renderer.domElement); }
+    }).catch(function(e){ setStatus('Hata: '+e.message); });
+
+    return function(){
+      cancelAnimationFrame(rafRef.current);
+      if(rendRef.current && mountRef.current){
+        try{ mountRef.current.removeChild(rendRef.current.domElement); }catch(e){}
+        rendRef.current.dispose();
+      }
     };
-  }, [selected, rotating]);
-
-  const scoreCol = (selected?.score||0)>=80?'#16a34a':(selected?.score||0)>=60?'#2563eb':(selected?.score||0)>=40?'#f59e0b':'#ef4444';
+  }, []);
 
   return (
-    <div style={{position:'relative',width:'100%',height:'100%',background:'#0f172a',overflow:'hidden'}}>
-      <div ref={mountRef} style={{width:'100%',height:'100%'}}/>
+    React.createElement('div', {style:{position:'relative',width:'100%',height:'100%',background:'#0f172a',overflow:'hidden'}},
+      React.createElement('div', {ref:mountRef, style:{width:'100%',height:'100%'}}),
 
-      {/* Status */}
-      {status && (
-        <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',color:'#fff',fontSize:14,textAlign:'center',pointerEvents:'none'}}>
-          <div style={{fontSize:36,marginBottom:12}}>🏙️</div>
-          <div style={{fontWeight:600}}>{status}</div>
-        </div>
-      )}
+      status ? React.createElement('div', {style:{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',color:'#fff',fontSize:14,textAlign:'center',pointerEvents:'none'}},
+        React.createElement('div', {style:{fontSize:36,marginBottom:12}}, '🏙️'),
+        React.createElement('div', {style:{fontWeight:600}}, status)
+      ) : null,
 
-      {/* Toolbar */}
-      <div style={{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}}>
-        <button onClick={onClose} style={{background:'rgba(15,23,42,.9)',color:'#fff',border:'1px solid #334155',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}}>
-          ← 2D Harita
-        </button>
-        <button onClick={()=>setRotating(r=>!r)} style={{background:'rgba(15,23,42,.9)',color:rotating?'#fbbf24':'#64748b',border:'1px solid #334155',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}}>
-          {rotating?'⏸ Durdur':'▶ Döndür'}
-        </button>
-        <div style={{background:'rgba(15,23,42,.85)',border:'1px solid #334155',borderRadius:8,padding:'10px 12px',fontSize:10,color:'#94a3b8'}}>
-          <div style={{fontWeight:700,color:'#e2e8f0',marginBottom:6}}>Lejant</div>
-          {Object.entries(IMAR_RENK_HEX).map(([k,c])=>(
-            <div key={k} style={{display:'flex',alignItems:'center',gap:5,marginBottom:3}}>
-              <div style={{width:8,height:8,borderRadius:2,background:c,flexShrink:0}}/>
-              <span>{k.replace(' Imarli','').replace(' / Imarsiz','')}</span>
-              <span style={{marginLeft:'auto',color:'#475569'}}>{IMAR_YUKSEKLIK[k]}m</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      React.createElement('div', {style:{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}},
+        React.createElement('button', {onClick:onClose, style:{background:'rgba(15,23,42,.9)',color:'#fff',border:'1px solid #334155',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}}, '← 2D Harita'),
+        React.createElement('button', {onClick:function(){setRotating(function(r){return !r;});}, style:{background:'rgba(15,23,42,.9)',color:rotating?'#fbbf24':'#64748b',border:'1px solid #334155',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}}, rotating?'⏸ Durdur':'▶ Döndür'),
+        React.createElement('div', {style:{background:'rgba(15,23,42,.85)',border:'1px solid #334155',borderRadius:8,padding:'10px 12px'}},
+          React.createElement('div', {style:{fontSize:10,fontWeight:700,color:'#e2e8f0',marginBottom:6}}, 'Lejant'),
+          Object.entries(IMAR_HEX).map(function(entry){
+            return React.createElement('div', {key:entry[0], style:{display:'flex',alignItems:'center',gap:5,marginBottom:3}},
+              React.createElement('div', {style:{width:8,height:8,borderRadius:2,background:entry[1],flexShrink:0}}),
+              React.createElement('span', {style:{fontSize:10,color:'#94a3b8'}}, entry[0].replace(' Imarli','').replace(' / Imarsiz','')),
+              React.createElement('span', {style:{fontSize:10,color:'#475569',marginLeft:'auto'}}, IMAR_YUK[entry[0]]+'m')
+            );
+          })
+        )
+      ),
 
-      {/* Bilgi paneli */}
-      <div style={{position:'absolute',bottom:16,left:12,zIndex:10,background:'rgba(15,23,42,.9)',border:'1px solid #334155',borderRadius:10,padding:14,minWidth:200}}>
-        <div style={{fontSize:10,color:'#64748b',marginBottom:6,fontWeight:600}}>3D GÖRÜNÜM</div>
-        {selected ? <>
-          <div style={{fontSize:14,fontWeight:700,color:'#fff',marginBottom:2}}>{selected.projeAdi||'İsimsiz'}</div>
-          <div style={{fontSize:11,color:'#94a3b8',marginBottom:6}}>{selected.il} / {selected.ilce}</div>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            <span style={{fontSize:10,background:'rgba(255,255,255,.08)',borderRadius:4,padding:'2px 6px',color:'#e2e8f0'}}>{(selected.alan||0).toLocaleString('tr-TR')} m²</span>
-            <span style={{fontSize:10,borderRadius:4,padding:'2px 6px',color:scoreCol,fontWeight:700,background:'rgba(255,255,255,.08)'}}>ISDBM: {selected.score||0}</span>
-            <span style={{fontSize:10,background:'rgba(255,255,255,.08)',borderRadius:4,padding:'2px 6px',color:'#e2e8f0'}}>{IMAR_YUKSEKLIK[selected.planDurumu]||20}m</span>
-          </div>
-        </> : <div style={{fontSize:12,color:'#64748b'}}>Parsel seçilmedi</div>}
-        <div style={{marginTop:8,fontSize:10,color:'#475569'}}>
-          🏗️ {parcels.length} parsel · 🏘️ {bldCount} OSM bina
-        </div>
-        <div style={{marginTop:4,fontSize:10,color:'#334155'}}>
-          Sürükle: döndür · Scroll: zoom
-        </div>
-      </div>
-
-      {/* Parsel seç */}
-      {parcels.length > 1 && (
-        <div style={{position:'absolute',bottom:16,right:12,zIndex:10,background:'rgba(15,23,42,.9)',border:'1px solid #334155',borderRadius:10,padding:10,maxWidth:180}}>
-          <div style={{fontSize:10,color:'#64748b',marginBottom:6,fontWeight:600}}>MERKEZ PARSEL</div>
-          {parcels.slice(0,5).map(p=>(
-            <div key={p.id} onClick={()=>setSelected(p)}
-              style={{fontSize:11,padding:'4px 8px',borderRadius:6,cursor:'pointer',marginBottom:3,
-                background:selected?.id===p.id?'rgba(37,99,235,.3)':'rgba(255,255,255,.05)',
-                color:selected?.id===p.id?'#60a5fa':'#94a3b8',
-                border:selected?.id===p.id?'1px solid #3b82f6':'1px solid transparent'}}>
-              {p.projeAdi||`${p.il||'?'}/${p.ilce||'?'}`}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+      React.createElement('div', {style:{position:'absolute',bottom:16,left:12,zIndex:10,background:'rgba(15,23,42,.9)',border:'1px solid #334155',borderRadius:10,padding:14,minWidth:200}},
+        React.createElement('div', {style:{fontSize:10,color:'#64748b',fontWeight:600,marginBottom:6}}, '3D GÖRÜNÜM'),
+        parcels[0] ? React.createElement('div', null,
+          React.createElement('div', {style:{fontSize:13,fontWeight:700,color:'#fff',marginBottom:2}}, parcels[0].projeAdi||'İsimsiz'),
+          React.createElement('div', {style:{fontSize:11,color:'#94a3b8'}}, (parcels[0].il||'?')+' / '+(parcels[0].ilce||'?'))
+        ) : null,
+        React.createElement('div', {style:{marginTop:8,fontSize:10,color:'#475569'}}, '🏗️ '+parcels.length+' parsel · 🏘️ '+bldCount+' bina'),
+        React.createElement('div', {style:{marginTop:4,fontSize:10,color:'#334155'}}, 'Sürükle: döndür · Scroll: zoom')
+      )
+    )
   );
 };
 
-// ── Terrain + Landuse Component// ── Terrain + Landuse Component ───────────────────────────────────────────
+// ── Terrain + Landuse Component// ── Terrain + Landuse Component// ── Terrain + Landuse Component ───────────────────────────────────────────
 const TerrainLanduse = ({parcel, apiUrl}) => {
   const [terrain, setTerrain] = React.useState(null);
   const [landuse, setLanduse] = React.useState(null);
