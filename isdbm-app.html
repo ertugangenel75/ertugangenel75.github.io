@@ -253,15 +253,30 @@ function calcISDBM(m){
   return Math.round(METRICS.reduce((s,mt)=>s+(m[mt.key]||50)*mt.weight,0));
 }
 function calcAlts(m, parcel, ov={}){
+  const PLAN_ZORUNLU={
+    "Konut Bölgesi":"Konut Projesi",
+    "Ticaret Bölgesi":"Ticari Ofis",
+    "Karma Kullanım":"Karma Kullanım",
+    "Turizm Bölgesi":"Otel / Turizm",
+    "Ticaret+Turizm":"Karma Kullanım",
+    "Ekoturizm Alanı":"Otel / Turizm",
+    "Lojistik Bölgesi":"Lojistik Merkezi",
+    "Sanayi Bölgesi":"Endüstriyel Tesis",
+  };
   const base=calcISDBM(m);
-  return INV_TEMPLATES.map(t=>{
+  const zorunluAd=PLAN_ZORUNLU[parcel?.planDurumu||""]||null;
+  const scored=INV_TEMPLATES.map(t=>{
     let bonus=0;
     Object.entries(t.scoreBonus).forEach(([k,w])=>{bonus+=((m[k]||50)-50)*w;});
     const score=Math.min(100,Math.max(0,Math.round(base+bonus)));
     const uyg=score>=85?"Çok Yüksek":score>=75?"Yüksek":score>=60?"Orta":"Düşük";
     const uygColor=score>=85?"#16a34a":score>=75?"#2563eb":score>=60?"#d97706":"#ef4444";
-    return{...t,score,uyg,uygColor};
-  }).sort((a,b)=>b.score-a.score);
+    const zorunlu=zorunluAd&&t.name===zorunluAd;
+    return{...t,score,uyg,uygColor,zorunlu};
+  });
+  const zorunluItem=zorunluAd?scored.find(t=>t.name===zorunluAd):null;
+  const diger=scored.filter(t=>!zorunluAd||t.name!==zorunluAd).sort((a,b)=>b.score-a.score);
+  return zorunluItem?[zorunluItem,...diger]:diger;
 }
 function scoreColor(s){return s>=85?"#16a34a":s>=75?"#2563eb":s>=60?"#d97706":"#ef4444";}
 function scoreLabel(s){return s>=85?"Mükemmel Fırsat":s>=75?"Güçlü Fırsat":s>=60?"Orta Potansiyel":"Düşük Potansiyel";}
@@ -393,9 +408,9 @@ async function reverseGeocode(lat,lng){
     const d=await r.json();
     const a=d.address||{};
     return{
-      il:a.province||a.state||a.city||"",
-      ilce:a.county||a.city_district||a.district||a.town||a.municipality||a.suburb||"",
-      mahalle:a.neighbourhood||a.quarter||a.village||a.hamlet||"",
+      il:a.province||a.state||"",
+      ilce:a.county||a.city_district||a.suburb||"",
+      mahalle:a.neighbourhood||a.quarter||a.suburb||"",
       postakodu:a.postcode||"",
       display:d.display_name||"",
     };
@@ -2646,7 +2661,7 @@ const ParcelForm=({parcel,onSave,onBack,Shell,toast,setToast})=>{
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:4}}>
           <div className="fg"><label>Plan Durumu</label>
             <select value={form.planDurumu||"Belirsiz"} onChange={e=>setF("planDurumu",e.target.value)}>
-              {["Sanayi Bölgesi","Konut Bölgesi","Karma Kullanım","Ticaret Bölgesi","Tarım Arazisi","Orman Arazisi","Özel Proje Alanı","Belirsiz"].map(o=><option key={o}>{o}</option>)}
+              {["Konut Bölgesi","Ticaret Bölgesi","Karma Kullanım","Turizm Bölgesi","Ticaret+Turizm","Ekoturizm Alanı","Lojistik Bölgesi","Sanayi Bölgesi","Tarım Arazisi","Orman Arazisi","Özel Proje Alanı","Belirsiz"].map(o=><option key={o}>{o}</option>)}
             </select>
           </div>
           <div className="fg"><label>Mevcut Kullanım</label>
@@ -3144,11 +3159,14 @@ const App=()=>{
           <div className="card">
             <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>🏗️ Yatırım Alternatifleri</div>
             {alts.map((alt,i)=>(
-              <div key={alt.name} className={`alt-card${selectedAlt?.name===alt.name?" selected":""}`} onClick={()=>setSelectedAlt(alt)}>
+              <div key={alt.name} className={`alt-card${selectedAlt?.name===alt.name?" selected":""}`} onClick={()=>setSelectedAlt(alt)} style={alt.zorunlu?{borderLeft:"3px solid #2563eb"}:{}}>
                 <div style={{width:26,height:26,borderRadius:"50%",background:i===0?"#eff6ff":"#f8fafc",color:i===0?"#2563eb":"#64748b",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0}}>{i+1}</div>
                 <div style={{fontSize:20}}>{alt.icon}</div>
                 <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
                   <div style={{fontWeight:600,fontSize:13}}>{alt.name}</div>
+                  {alt.zorunlu&&<span style={{fontSize:9,background:"#1e3a5f",color:"#93c5fd",borderRadius:3,padding:"1px 5px",fontWeight:700,flexShrink:0}}>⚖️ PLAN</span>}
+                </div>
                   <div style={{fontSize:11,color:"#94a3b8"}}>{alt.capexFmt?.combined||alt.capex} | ROI: {alt.roi}</div>
                 <div style={{fontSize:10,color:"#94a3b8",marginTop:1}}>İnşaat: {alt.capexDetail?Math.round(alt.capexDetail.insAlan).toLocaleString("tr-TR"):""} m² | {alt.sinif||""} sınıf | Emsal: {alt.capexDetail?.emsal||""}</div>
                 </div>
@@ -3266,7 +3284,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 
 <script>
-// View3D — Three.js + OSM uydu zemin
 var IMAR_YUK={'Konut Imarli':35,'Ticaret Imarli':55,'Sanayi Imarli':18,'Lojistik Imarli':15,'Turizm Imarli':45,'Tarim / Imarsiz':6,'Belirsiz':20};
 var IMAR_HEX={'Konut Imarli':'#2563eb','Ticaret Imarli':'#16a34a','Sanayi Imarli':'#f59e0b','Lojistik Imarli':'#8b5cf6','Turizm Imarli':'#ec4899','Tarim / Imarsiz':'#64748b','Belirsiz':'#94a3b8'};
 
@@ -3280,49 +3297,29 @@ function loadThreeJS(){
   });
 }
 
-// lat/lng → OSM tile XY (zoom 16)
 function latLngToTile(lat,lng,zoom){
   var n=Math.pow(2,zoom);
   var x=Math.floor((lng+180)/360*n);
   var latRad=lat*Math.PI/180;
   var y=Math.floor((1-Math.log(Math.tan(latRad)+1/Math.cos(latRad))/Math.PI)/2*n);
-  return {x:x,y:y,z:zoom};
+  return {x:x,y:y};
 }
 
-// 3x3 tile grid → canvas texture
-function buildMapTexture(THREE, lat, lng, callback){
-  var zoom=16;
-  var t=latLngToTile(lat,lng,zoom);
-  var canvas=document.createElement('canvas');
-  canvas.width=768; canvas.height=768;
-  var ctx=canvas.getContext('2d');
-  ctx.fillStyle='#0a1628';
-  ctx.fillRect(0,0,768,768);
-  var loaded=0, total=9;
-  var servers=['a','b','c'];
+function buildMapTexture(THREE,lat,lng,cb){
+  var zoom=16,t=latLngToTile(lat,lng,zoom);
+  var can=document.createElement('canvas');
+  can.width=768;can.height=768;
+  var ctx=can.getContext('2d');
+  ctx.fillStyle='#0a1628';ctx.fillRect(0,0,768,768);
+  var loaded=0,total=9,srv=['a','b','c'];
   for(var dy=-1;dy<=1;dy++){
     for(var dx=-1;dx<=1;dx++){
       (function(dx,dy){
-        var tx=t.x+dx, ty=t.y+dy;
-        var s=servers[Math.abs(tx+ty)%3];
-        var url='https://'+s+'.tile.openstreetmap.org/'+zoom+'/'+tx+'/'+ty+'.png';
-        var img=new Image();
-        img.crossOrigin='anonymous';
-        img.onload=function(){
-          ctx.drawImage(img,(dx+1)*256,(dy+1)*256,256,256);
-          loaded++;
-          if(loaded===total){
-            var tex=new THREE.CanvasTexture(canvas);
-            callback(tex);
-          }
-        };
-        img.onerror=function(){
-          loaded++;
-          if(loaded===total){
-            var tex=new THREE.CanvasTexture(canvas);
-            callback(tex);
-          }
-        };
+        var tx=t.x+dx,ty=t.y+dy;
+        var url='https://'+srv[Math.abs(tx+ty)%3]+'.tile.openstreetmap.org/'+zoom+'/'+tx+'/'+ty+'.png';
+        var img=new Image();img.crossOrigin='anonymous';
+        img.onload=function(){ctx.drawImage(img,(dx+1)*256,(dy+1)*256,256,256);if(++loaded===total)cb(new THREE.CanvasTexture(can));};
+        img.onerror=function(){if(++loaded===total)cb(new THREE.CanvasTexture(can));};
         img.src=url;
       })(dx,dy);
     }
@@ -3337,24 +3334,29 @@ function fetchBldgs(lat,lng){
       var nodes={};
       d.elements.forEach(function(e){if(e.type==='node')nodes[e.id]=[e.lat,e.lon];});
       return d.elements.filter(function(e){return e.type==='way'&&e.nodes&&e.nodes.length>2;}).map(function(w){
-        var coords=w.nodes.map(function(id){return nodes[id];}).filter(Boolean);
-        var lvl=parseInt((w.tags&&w.tags['building:levels'])||'3');
-        var h=parseInt((w.tags&&w.tags.height)||String(lvl*3.5));
-        return {coords:coords,height:Math.max(h,5)};
+        var c=w.nodes.map(function(id){return nodes[id];}).filter(Boolean);
+        var h=parseInt((w.tags&&w.tags.height)||String(parseInt((w.tags&&w.tags['building:levels'])||'3')*3.5));
+        return {coords:c,height:Math.max(h,5)};
       }).filter(function(b){return b.coords.length>2;});
     }).catch(function(){return [];});
 }
 
-function hexInt(hex){return parseInt(hex.replace('#',''),16);}
+function hexInt(h){return parseInt(h.replace('#',''),16);}
+function getCenter(p){
+  if(p.lat&&p.lng)return{lat:p.lat,lng:p.lng};
+  var arr=p.coordinates||p.coords||[];
+  if(arr.length){var sl=0,sn=0;arr.forEach(function(c){sl+=c[0];sn+=c[1];});return{lat:sl/arr.length,lng:sn/arr.length};}
+  return{lat:41,lng:29};
+}
 
 var View3D=function(props){
   var parcels=props.parcels,onClose=props.onClose;
   var mountRef=React.useRef(null);
   var st=React.useRef({theta:20,phi:45,r:150,drag:false,px:0,py:0});
   var rafRef=React.useRef(null),rendRef=React.useRef(null),rotRef=React.useRef(true);
-  var sp=React.useState('Harita yükleniyor...'),status=sp[0],setStatus=sp[1];
-  var bc=React.useState(0),bldCount=bc[0],setBldCount=bc[1];
-  var rp=React.useState(true),rotating=rp[0],setRotating=rp[1];
+  var s1=React.useState('Harita yükleniyor...'),status=s1[0],setStatus=s1[1];
+  var s2=React.useState(0),bldCount=s2[0],setBldCount=s2[1];
+  var s3=React.useState(true),rotating=s3[0],setRotating=s3[1];
   React.useEffect(function(){rotRef.current=rotating;},[rotating]);
 
   React.useEffect(function(){
@@ -3362,232 +3364,106 @@ var View3D=function(props){
     loadThreeJS().then(function(T){
       THREE=T;
       var w=mountRef.current.clientWidth,h=mountRef.current.clientHeight;
-      scene=new THREE.Scene();
-      scene.background=new THREE.Color(0x050d1a);
+      scene=new THREE.Scene();scene.background=new THREE.Color(0x050d1a);
       scene.fog=new THREE.FogExp2(0x050d1a,0.0025);
       camera=new THREE.PerspectiveCamera(50,w/h,0.1,2000);
       renderer=new THREE.WebGLRenderer({antialias:true});
       renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-      renderer.setSize(w,h);
-      renderer.shadowMap.enabled=true;
-      rendRef.current=renderer;
-      mountRef.current.appendChild(renderer.domElement);
-
-      // Işıklar
+      renderer.setSize(w,h);renderer.shadowMap.enabled=true;
+      rendRef.current=renderer;mountRef.current.appendChild(renderer.domElement);
       scene.add(new THREE.AmbientLight(0x334466,1.0));
-      var sun=new THREE.DirectionalLight(0xffffff,0.9);
-      sun.position.set(60,150,60);sun.castShadow=true;
-      sun.shadow.mapSize.width=1024;sun.shadow.mapSize.height=1024;
-      scene.add(sun);
-      var blue=new THREE.PointLight(0x3b82f6,1.2,250);
-      blue.position.set(0,100,0);scene.add(blue);
-      var fill=new THREE.DirectionalLight(0x6366f1,0.3);
-      fill.position.set(-80,40,-80);scene.add(fill);
-
-      var cP=parcels[0];
-      // lat/lng yoksa coordinates'dan hesapla
-      function getCenterFromCoords(p){
-        if(p.lat&&p.lng) return {lat:p.lat,lng:p.lng};
-        if(p.coordinates&&p.coordinates.length>0){
-          var sumLat=0,sumLng=0;
-          p.coordinates.forEach(function(c){sumLat+=c[0];sumLng+=c[1];});
-          return {lat:sumLat/p.coordinates.length,lng:sumLng/p.coordinates.length};
-        }
-        if(p.coords&&p.coords.length>0){
-          var sumLat=0,sumLng=0;
-          p.coords.forEach(function(c){sumLat+=c[0];sumLng+=c[1];});
-          return {lat:sumLat/p.coords.length,lng:sumLng/p.coords.length};
-        }
-        return {lat:41.0,lng:29.0};
-      }
-      var cCenter=cP?getCenterFromCoords(cP):{lat:41.0,lng:29.0};
-      var cLat=cCenter.lat;
-      var cLng=cCenter.lng;
-      var SC=80000;
-      var GROUND_SIZE=300;
-
-      // Zemin — OSM harita texture
-      var gndGeo=new THREE.PlaneGeometry(GROUND_SIZE,GROUND_SIZE);
-      var gndMat=new THREE.MeshLambertMaterial({color:0x223355});
-      var gnd=new THREE.Mesh(gndGeo,gndMat);
-      gnd.rotation.x=-Math.PI/2;
-      gnd.receiveShadow=true;
-      scene.add(gnd);
-
-      // Harita texture yükle
-      buildMapTexture(THREE,cLat,cLng,function(tex){
-        gnd.material.map=tex;
-        gnd.material.color.set(0xffffff);
-        gnd.material.needsUpdate=true;
-        setStatus('Binalar yükleniyor...');
-      });
-
-      // İnce grid üstüne — haritayı bozmaz
-      var grid=new THREE.GridHelper(GROUND_SIZE,30,0x1e3a5f,0x1e3a5f);
-      grid.material.transparent=true;
-      grid.material.opacity=0.15;
-      grid.position.y=0.5;
-      scene.add(grid);
-
-      // Parseller
-      var h3d_center=15;
+      var sun=new THREE.DirectionalLight(0xffffff,0.9);sun.position.set(60,150,60);sun.castShadow=true;scene.add(sun);
+      scene.add(new THREE.PointLight(0x3b82f6,1.2,250,0));
+      var ctr=getCenter(parcels[0]||{});
+      var cLat=ctr.lat,cLng=ctr.lng,SC=80000,GS=300;
+      var gGeo=new THREE.PlaneGeometry(GS,GS);
+      var gMat=new THREE.MeshLambertMaterial({color:0x223355});
+      var gnd=new THREE.Mesh(gGeo,gMat);gnd.rotation.x=-Math.PI/2;gnd.receiveShadow=true;scene.add(gnd);
+      buildMapTexture(THREE,cLat,cLng,function(tex){gMat.map=tex;gMat.color.set(0xffffff);gMat.needsUpdate=true;setStatus('Binalar...');});
+      var grid=new THREE.GridHelper(GS,30,0x1e3a5f,0x1e3a5f);grid.material.transparent=true;grid.material.opacity=0.12;grid.position.y=0.5;scene.add(grid);
+      var h3dc=15;
       parcels.forEach(function(p){
-        var h3d=IMAR_YUK[p.planDurumu]||20;
-        if(h3d>h3d_center) h3d_center=h3d/2;
+        var h3d=IMAR_YUK[p.planDurumu]||20;if(h3d>h3dc)h3dc=h3d/2;
         var col=hexInt(IMAR_HEX[p.planDurumu]||'#2563eb');
-        var mat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.90});
-        var glowMat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.12,side:THREE.BackSide});
-
-        if(p.coordinates&&p.coordinates.length>=3){
+        var mat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.9});
+        var glw=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.12,side:THREE.BackSide});
+        var coords=p.coordinates||p.coords||[];
+        if(coords.length>=3){
           try{
-            var pts=p.coordinates.map(function(c){
-              return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC);
-            });
-            var shape=new THREE.Shape(pts);
-            var geo=new THREE.ExtrudeGeometry(shape,{depth:h3d,bevelEnabled:true,bevelThickness:0.3,bevelSize:0.2,bevelSegments:1});
+            var pts=coords.map(function(c){return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC);});
+            var geo=new THREE.ExtrudeGeometry(new THREE.Shape(pts),{depth:h3d,bevelEnabled:false});
             geo.rotateX(-Math.PI/2);
             var mesh=new THREE.Mesh(geo,mat);mesh.castShadow=true;scene.add(mesh);
-            var glowGeo=new THREE.ExtrudeGeometry(shape,{depth:h3d+1,bevelEnabled:false});
-            glowGeo.rotateX(-Math.PI/2);
-            scene.add(new THREE.Mesh(glowGeo,glowMat));
-            scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.5})));
-            var ctrX=pts.reduce(function(s,v){return s+v.x;},0)/pts.length;
-            var ctrZ=pts.reduce(function(s,v){return s+v.y;},0)/pts.length;
-            var pl=new THREE.PointLight(col,2.5,120);
-            pl.position.set(ctrX,h3d+12,ctrZ);scene.add(pl);
+            scene.add(new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape(pts),{depth:h3d+1,bevelEnabled:false}).rotateX(-Math.PI/2)||geo,glw));
+            scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.4})));
           }catch(e){}
-        }else if(p.lat&&p.lng){
-          var x=(p.lng-cLng)*SC,z=(p.lat-cLat)*SC;
-          var bGeo=new THREE.BoxGeometry(8,h3d,8);
-          var mesh2=new THREE.Mesh(bGeo,mat);
-          mesh2.position.set(x,h3d/2,z);mesh2.castShadow=true;scene.add(mesh2);
-          scene.add(new THREE.Mesh(new THREE.BoxGeometry(10,h3d+1,10),glowMat));
-          scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(bGeo),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.6})));
-          var ring=new THREE.Mesh(new THREE.RingGeometry(4,6,32),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.8,side:THREE.DoubleSide}));
-          ring.rotation.x=-Math.PI/2;ring.position.set(x,h3d+0.5,z);scene.add(ring);
-          var pl2=new THREE.PointLight(col,3.0,120);
-          pl2.position.set(x,h3d+15,z);scene.add(pl2);
+        }else{
+          var pc=getCenter(p),x=(pc.lng-cLng)*SC,z=(pc.lat-cLat)*SC;
+          var bG=new THREE.BoxGeometry(8,h3d,8);
+          var m2=new THREE.Mesh(bG,mat);m2.position.set(x,h3d/2,z);m2.castShadow=true;scene.add(m2);
+          scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(bG),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.5})));
+          var rg=new THREE.RingGeometry(4,6,32);
+          var rm=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.8,side:THREE.DoubleSide}));
+          rm.rotation.x=-Math.PI/2;rm.position.set(x,h3d+0.5,z);scene.add(rm);
+          var pl=new THREE.PointLight(col,3,120);pl.position.set(x,h3d+15,z);scene.add(pl);
         }
+        // POI pinleri
+        var PC={'Ulaşım':0x3b82f6,'Sağlık':0xef4444,'Eğitim':0x16a34a,'Ticaret':0xf59e0b,'Konaklama':0x8b5cf6,'Diğer':0xfbbf24};
+        (p.pois||[]).forEach(function(poi){
+          if(!poi.lat||!poi.lng)return;
+          var px=(poi.lng-cLng)*SC,pz=(poi.lat-cLat)*SC;
+          if(Math.abs(px)>140||Math.abs(pz)>140)return;
+          var pc2=PC[poi.kategori]||0xfbbf24;
+          var pin=new THREE.Mesh(new THREE.CylinderGeometry(1,1,6,6),new THREE.MeshLambertMaterial({color:pc2}));
+          pin.position.set(px,3,pz);scene.add(pin);
+          var dot=new THREE.Mesh(new THREE.SphereGeometry(2,6,6),new THREE.MeshLambertMaterial({color:pc2}));
+          dot.position.set(px,7,pz);scene.add(dot);
+        });
       });
-
-      // OSM binalar
-      var bP=cP&&cP.lat&&cP.lng?fetchBldgs(cLat,cLng):Promise.resolve([]);
+      var bP=(cLat!==41||cLng!==29)?fetchBldgs(cLat,cLng):Promise.resolve([]);
       bP.then(function(blds){
         setBldCount(blds.length);
         blds.forEach(function(b){
           try{
-            var pts=b.coords.map(function(c){
-              return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC);
-            });
+            var pts=b.coords.map(function(c){return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC);});
             if(pts.length<3)return;
             var geo=new THREE.ExtrudeGeometry(new THREE.Shape(pts),{depth:Math.min(b.height,80),bevelEnabled:false});
             geo.rotateX(-Math.PI/2);
-            scene.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x1a3a5c,transparent:true,opacity:0.80})));
+            scene.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x1a3a5c,transparent:true,opacity:0.75})));
           }catch(e){}
         });
         setStatus('');
       });
-
-      // POI noktaları — tüm parsellerden
-      var poiColors={
-        'Ulaşım':0x3b82f6,'Sağlık':0xef4444,'Eğitim':0x16a34a,
-        'Ticaret':0xf59e0b,'Konaklama':0x8b5cf6,'Finans':0x06b6d4,
-        'Yeşil Alan':0x22c55e,'Diğer':0xfbbf24
-      };
-      parcels.forEach(function(p){
-        if(!p.pois||!p.pois.length) return;
-        p.pois.forEach(function(poi){
-          if(!poi.lat||!poi.lng) return;
-          var px=(poi.lng-cLng)*SC, pz=(poi.lat-cLat)*SC;
-          // Mesafe filtresi — çok uzaktakileri gösterme
-          if(Math.abs(px)>150||Math.abs(pz)>150) return;
-          var col=poiColors[poi.kategori]||0xfbbf24;
-          // İnce silindir pin
-          var pinGeo=new THREE.CylinderGeometry(1.5,1.5,8,6);
-          var pinMat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.9});
-          var pin=new THREE.Mesh(pinGeo,pinMat);
-          pin.position.set(px,4,pz);
-          scene.add(pin);
-          // Üst top
-          var dotGeo=new THREE.SphereGeometry(2.5,6,6);
-          var dot=new THREE.Mesh(dotGeo,new THREE.MeshLambertMaterial({color:col}));
-          dot.position.set(px,9,pz);
-          scene.add(dot);
-          // Küçük ışık
-          var pl=new THREE.PointLight(col,0.8,30);
-          pl.position.set(px,12,pz);
-          scene.add(pl);
-        });
-      });
-
-      // Kontroller
       var el=renderer.domElement;
       el.addEventListener('mousedown',function(e){st.current.drag=true;st.current.px=e.clientX;st.current.py=e.clientY;});
       el.addEventListener('mouseup',function(){st.current.drag=false;});
       el.addEventListener('mouseleave',function(){st.current.drag=false;});
-      el.addEventListener('mousemove',function(e){
-        if(!st.current.drag)return;
-        st.current.theta-=(e.clientX-st.current.px)*0.4;
-        st.current.phi=Math.max(8,Math.min(75,st.current.phi-(e.clientY-st.current.py)*0.4));
-        st.current.px=e.clientX;st.current.py=e.clientY;
-      });
-      el.addEventListener('wheel',function(e){
-        st.current.r=Math.max(40,Math.min(500,st.current.r+e.deltaY*0.15));
-        e.preventDefault();
-      },{passive:false});
+      el.addEventListener('mousemove',function(e){if(!st.current.drag)return;st.current.theta-=(e.clientX-st.current.px)*0.4;st.current.phi=Math.max(8,Math.min(75,st.current.phi-(e.clientY-st.current.py)*0.4));st.current.px=e.clientX;st.current.py=e.clientY;});
+      el.addEventListener('wheel',function(e){st.current.r=Math.max(40,Math.min(500,st.current.r+e.deltaY*0.15));e.preventDefault();},{passive:false});
       var lt=null;
       el.addEventListener('touchstart',function(e){lt=e.touches[0];},{passive:true});
-      el.addEventListener('touchmove',function(e){
-        if(!lt)return;
-        st.current.theta-=(e.touches[0].clientX-lt.clientX)*0.5;
-        st.current.phi=Math.max(8,Math.min(75,st.current.phi-(e.touches[0].clientY-lt.clientY)*0.5));
-        lt=e.touches[0];e.preventDefault();
-      },{passive:false});
-
-      function animate(){
-        rafRef.current=requestAnimationFrame(animate);
-        if(rotRef.current&&!st.current.drag)st.current.theta+=0.10;
-        var t=st.current.theta*Math.PI/180,p=st.current.phi*Math.PI/180,r=st.current.r;
-        camera.position.set(r*Math.sin(t)*Math.cos(p),r*Math.sin(p),r*Math.cos(t)*Math.cos(p));
-        camera.lookAt(0,h3d_center,0);
-        renderer.render(scene,camera);
-      }
+      el.addEventListener('touchmove',function(e){if(!lt)return;st.current.theta-=(e.touches[0].clientX-lt.clientX)*0.5;st.current.phi=Math.max(8,Math.min(75,st.current.phi-(e.touches[0].clientY-lt.clientY)*0.5));lt=e.touches[0];e.preventDefault();},{passive:false});
+      function animate(){rafRef.current=requestAnimationFrame(animate);if(rotRef.current&&!st.current.drag)st.current.theta+=0.10;var t=st.current.theta*Math.PI/180,p=st.current.phi*Math.PI/180,r=st.current.r;camera.position.set(r*Math.sin(t)*Math.cos(p),r*Math.sin(p),r*Math.cos(t)*Math.cos(p));camera.lookAt(0,h3dc,0);renderer.render(scene,camera);}
       animate();
-
-      window.addEventListener('resize',function(){
-        if(!mountRef.current)return;
-        var nw=mountRef.current.clientWidth,nh=mountRef.current.clientHeight;
-        camera.aspect=nw/nh;camera.updateProjectionMatrix();renderer.setSize(nw,nh);
-      });
-    }).catch(function(e){setStatus('Hata: '+e.message);});
-
-    return function(){
-      cancelAnimationFrame(rafRef.current);
-      if(rendRef.current&&mountRef.current){
-        try{mountRef.current.removeChild(rendRef.current.domElement);}catch(e){}
-        rendRef.current.dispose();
-      }
-    };
+      window.addEventListener('resize',function(){if(!mountRef.current)return;var nw=mountRef.current.clientWidth,nh=mountRef.current.clientHeight;camera.aspect=nw/nh;camera.updateProjectionMatrix();renderer.setSize(nw,nh);});
+    }).catch(function(e){setStatus('Hata:'+e.message);});
+    return function(){cancelAnimationFrame(rafRef.current);if(rendRef.current&&mountRef.current){try{mountRef.current.removeChild(rendRef.current.domElement);}catch(e){}rendRef.current.dispose();}};
   },[]);
 
   return React.createElement('div',{style:{position:'fixed',inset:0,background:'#050d1a',overflow:'hidden',zIndex:9999}},
     React.createElement('div',{ref:mountRef,style:{width:'100%',height:'100%'}}),
-    status?React.createElement('div',{style:{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(5,13,26,.85)',border:'1px solid #1e3a5f',borderRadius:8,padding:'6px 16px',color:'#60a5fa',fontSize:12,pointerEvents:'none'}},status):null,
+    status?React.createElement('div',{style:{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(5,13,26,.85)',border:'1px solid #1e3a5f',borderRadius:8,padding:'6px 16px',color:'#60a5fa',fontSize:12,pointerEvents:'none',whiteSpace:'nowrap'}},status):null,
     React.createElement('div',{style:{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}},
       React.createElement('button',{onClick:onClose,style:{background:'rgba(5,13,26,.9)',color:'#fff',border:'1px solid #1e3a5f',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},'← 2D Harita'),
       React.createElement('button',{onClick:function(){setRotating(function(r){return !r;});},style:{background:'rgba(5,13,26,.9)',color:rotating?'#fbbf24':'#475569',border:'1px solid #1e3a5f',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},rotating?'⏸ Durdur':'▶ Döndür')
     ),
-    React.createElement('div',{style:{position:'absolute',bottom:16,left:12,zIndex:10,background:'rgba(5,13,26,.92)',border:'1px solid #1e3a5f',borderRadius:10,padding:14,minWidth:180}},
-      React.createElement('div',{style:{fontSize:10,color:'#475569',fontWeight:600,marginBottom:6,letterSpacing:1}},'3D GÖRÜNÜM'),
+    React.createElement('div',{style:{position:'absolute',bottom:80,left:12,zIndex:10,background:'rgba(5,13,26,.92)',border:'1px solid #1e3a5f',borderRadius:10,padding:12,minWidth:170}},
+      React.createElement('div',{style:{fontSize:10,color:'#475569',fontWeight:600,marginBottom:5}},'3D GÖRÜNÜM'),
       parcels[0]?React.createElement('div',null,
-        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#fff',marginBottom:2}},parcels[0].projeAdi||'İsimsiz'),
-        React.createElement('div',{style:{fontSize:11,color:'#64748b',marginBottom:6}},(parcels[0].il||'?')+' / '+(parcels[0].ilce||'?')),
-        React.createElement('div',{style:{display:'flex',gap:6}},
-          React.createElement('span',{style:{fontSize:10,background:'rgba(59,130,246,.2)',border:'1px solid rgba(59,130,246,.3)',borderRadius:4,padding:'2px 6px',color:'#93c5fd'}},(IMAR_YUK[parcels[0].planDurumu]||20)+'m'),
-          React.createElement('span',{style:{fontSize:10,background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.1)',borderRadius:4,padding:'2px 6px',color:'#94a3b8'}},parcels[0].planDurumu||'Belirsiz')
-        )
+        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#fff',marginBottom:1}},parcels[0].projeAdi||'İsimsiz'),
+        React.createElement('div',{style:{fontSize:11,color:'#64748b'}},(parcels[0].il||'?')+' / '+(parcels[0].ilce||'?'))
       ):null,
-      React.createElement('div',{style:{marginTop:8,fontSize:10,color:'#334155'}},'🏗️ '+parcels.length+' parsel · 🏘️ '+bldCount+' bina'),
+      React.createElement('div',{style:{marginTop:6,fontSize:10,color:'#334155'}},'🏗️ '+parcels.length+' parsel · 🏘️ '+bldCount+' OSM bina'),
       React.createElement('div',{style:{marginTop:3,fontSize:10,color:'#1e3a5f'}},'Sürükle · Scroll · Touch')
     ),
     React.createElement('div',{style:{position:'absolute',top:12,left:12,zIndex:10,background:'rgba(5,13,26,.7)',border:'1px solid #1e3a5f',borderRadius:6,padding:'4px 10px',fontSize:10,color:'#3b82f6',fontWeight:600}},'🏙️ ISDBM 3D')
