@@ -124,23 +124,24 @@ const LOKASYON_KAT={
 
 // ── Yatırım Türü Şablonları — formül parametreleriyle ────────────────────
 const INV_TEMPLATES=[
-   
-  {name:"Karma Kullanım",        icon:"🏢",birimKey:"karma",     insaatKat:1.1, emsalDef:2.5,sinif:"A/B",
-   scoreBonus:{demografi:.2,ticari:.2},roi:"8-14%",irr:"10-16%",sure:"36-48 ay",kapasite:"15.000 m²"},
-  {name:"AVM / Ticaret Merkezi", icon:"🛒",birimKey:"ticaret",   insaatKat:1.2, emsalDef:1.5,sinif:"A",
-   scoreBonus:{ticari:.3,demografi:.2},roi:"9-13%",irr:"11-15%",sure:"24-36 ay",kapasite:"50.000 m²"},
-  {name:"Otel / Turizm",         icon:"🏨",birimKey:"otel",      insaatKat:1.3, emsalDef:1.8,sinif:"A",
-   scoreBonus:{ulasim:.25,demografi:.15},roi:"7-12%",irr:"9-14%",sure:"18-30 ay",kapasite:"50-300 oda"},
   {name:"Konut Projesi",         icon:"🏘️",birimKey:"konut",     insaatKat:1.0, emsalDef:2.0,sinif:"B",
    scoreBonus:{demografi:.3,gelisme:.2},roi:"15-25%",irr:"18-28%",sure:"24-36 ay",kapasite:"100-500 konut"},
+  {name:"Ticari Ofis",           icon:"🏢",birimKey:"ticaret",   insaatKat:1.2, emsalDef:2.5,sinif:"A",
+   scoreBonus:{ticari:.3,demografi:.2},roi:"9-13%",irr:"11-15%",sure:"24-36 ay",kapasite:"50.000 m²"},
+  {name:"Karma Kullanım",        icon:"🏙️",birimKey:"karma",     insaatKat:1.1, emsalDef:2.5,sinif:"A/B",
+   scoreBonus:{demografi:.2,ticari:.2},roi:"8-14%",irr:"10-16%",sure:"36-48 ay",kapasite:"15.000 m²"},
+  {name:"Otel / Turizm",         icon:"🏨",birimKey:"otel",      insaatKat:1.3, emsalDef:1.8,sinif:"A",
+   scoreBonus:{ulasim:.25,demografi:.15},roi:"7-12%",irr:"9-14%",sure:"18-30 ay",kapasite:"50-300 oda"},
+  {name:"AVM / Ticaret Merkezi", icon:"🛒",birimKey:"avm",       insaatKat:1.2, emsalDef:1.5,sinif:"A",
+   scoreBonus:{ticari:.3,demografi:.2},roi:"9-13%",irr:"11-15%",sure:"24-36 ay",kapasite:"50.000 m²"},
+  {name:"Lojistik Merkezi",      icon:"🚚",birimKey:"lojistik",  insaatKat:1.0, emsalDef:0.6,sinif:"B",
+   scoreBonus:{ulasim:.3,altyapi:.2}, roi:"14-20%",irr:"16-24%",sure:"18-24 ay",kapasite:"50.000 m²"},
   {name:"Endüstriyel Tesis",     icon:"🏭",birimKey:"endustri",  insaatKat:0.9, emsalDef:0.7,sinif:"B/C",
    scoreBonus:{altyapi:.25,ulasim:.25},roi:"11-17%",irr:"13-19%",sure:"12-18 ay",kapasite:"Özelleştirilmiş"},
-      {name:"Lojistik Merkezi",      icon:"🚚",birimKey:"lojistik",  insaatKat:1.0, emsalDef:0.6,sinif:"B",
-   scoreBonus:{ulasim:.3,altyapi:.2}, roi:"14-20%",irr:"16-24%",sure:"18-24 ay",kapasite:"50.000 m²"},
-    {name:"Okul / Kampüs",     icon:"💻",birimKey:"ofis",      insaatKat:1.15,emsalDef:2.0,sinif:"A",
-   scoreBonus:{demografi:.25,ticari:.25},roi:"10-15%",irr:"12-18%",sure:"30-42 ay",kapasite:"30.000 m²"},
-   {name:"Data Center Campus",    icon:"🏗️",birimKey:"datacenter",insaatKat:1.0, emsalDef:0.5,sinif:"A++",
+  {name:"Data Center Campus",    icon:"🖥️",birimKey:"datacenter",insaatKat:1.0, emsalDef:0.5,sinif:"A++",
    scoreBonus:{altyapi:.3,ulasim:.2}, roi:"12-18%",irr:"14-22%",sure:"24-36 ay",kapasite:"40-60 MW"},
+  {name:"Okul / Kampüs",         icon:"🎓",birimKey:"okul",      insaatKat:1.15,emsalDef:2.0,sinif:"A",
+   scoreBonus:{demografi:.25,ticari:.15},roi:"8-12%",irr:"10-15%",sure:"30-42 ay",kapasite:"30.000 m²"},
 ];
 
 // ── CAPEX Formül Motoru ──────────────────────────────────────────────────
@@ -392,9 +393,9 @@ async function reverseGeocode(lat,lng){
     const d=await r.json();
     const a=d.address||{};
     return{
-      il:a.province||a.state||"",
-      ilce:a.county||a.city_district||a.suburb||"",
-      mahalle:a.neighbourhood||a.quarter||a.suburb||"",
+      il:a.province||a.state||a.city||"",
+      ilce:a.county||a.city_district||a.district||a.town||a.municipality||a.suburb||"",
+      mahalle:a.neighbourhood||a.quarter||a.village||a.hamlet||"",
       postakodu:a.postcode||"",
       display:d.display_name||"",
     };
@@ -3384,8 +3385,24 @@ var View3D=function(props){
       fill.position.set(-80,40,-80);scene.add(fill);
 
       var cP=parcels[0];
-      var cLat=cP&&cP.lat?cP.lat:41.0;
-      var cLng=cP&&cP.lng?cP.lng:29.0;
+      // lat/lng yoksa coordinates'dan hesapla
+      function getCenterFromCoords(p){
+        if(p.lat&&p.lng) return {lat:p.lat,lng:p.lng};
+        if(p.coordinates&&p.coordinates.length>0){
+          var sumLat=0,sumLng=0;
+          p.coordinates.forEach(function(c){sumLat+=c[0];sumLng+=c[1];});
+          return {lat:sumLat/p.coordinates.length,lng:sumLng/p.coordinates.length};
+        }
+        if(p.coords&&p.coords.length>0){
+          var sumLat=0,sumLng=0;
+          p.coords.forEach(function(c){sumLat+=c[0];sumLng+=c[1];});
+          return {lat:sumLat/p.coords.length,lng:sumLng/p.coords.length};
+        }
+        return {lat:41.0,lng:29.0};
+      }
+      var cCenter=cP?getCenterFromCoords(cP):{lat:41.0,lng:29.0};
+      var cLat=cCenter.lat;
+      var cLng=cCenter.lng;
       var SC=80000;
       var GROUND_SIZE=300;
 
@@ -3441,12 +3458,12 @@ var View3D=function(props){
           }catch(e){}
         }else if(p.lat&&p.lng){
           var x=(p.lng-cLng)*SC,z=(p.lat-cLat)*SC;
-          var bGeo=new THREE.BoxGeometry(20,h3d,20);
+          var bGeo=new THREE.BoxGeometry(8,h3d,8);
           var mesh2=new THREE.Mesh(bGeo,mat);
           mesh2.position.set(x,h3d/2,z);mesh2.castShadow=true;scene.add(mesh2);
-          scene.add(new THREE.Mesh(new THREE.BoxGeometry(22,h3d+1,22),glowMat));
+          scene.add(new THREE.Mesh(new THREE.BoxGeometry(10,h3d+1,10),glowMat));
           scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(bGeo),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.6})));
-          var ring=new THREE.Mesh(new THREE.RingGeometry(11,14,32),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.8,side:THREE.DoubleSide}));
+          var ring=new THREE.Mesh(new THREE.RingGeometry(4,6,32),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.8,side:THREE.DoubleSide}));
           ring.rotation.x=-Math.PI/2;ring.position.set(x,h3d+0.5,z);scene.add(ring);
           var pl2=new THREE.PointLight(col,3.0,120);
           pl2.position.set(x,h3d+15,z);scene.add(pl2);
@@ -3469,6 +3486,38 @@ var View3D=function(props){
           }catch(e){}
         });
         setStatus('');
+      });
+
+      // POI noktaları — tüm parsellerden
+      var poiColors={
+        'Ulaşım':0x3b82f6,'Sağlık':0xef4444,'Eğitim':0x16a34a,
+        'Ticaret':0xf59e0b,'Konaklama':0x8b5cf6,'Finans':0x06b6d4,
+        'Yeşil Alan':0x22c55e,'Diğer':0xfbbf24
+      };
+      parcels.forEach(function(p){
+        if(!p.pois||!p.pois.length) return;
+        p.pois.forEach(function(poi){
+          if(!poi.lat||!poi.lng) return;
+          var px=(poi.lng-cLng)*SC, pz=(poi.lat-cLat)*SC;
+          // Mesafe filtresi — çok uzaktakileri gösterme
+          if(Math.abs(px)>150||Math.abs(pz)>150) return;
+          var col=poiColors[poi.kategori]||0xfbbf24;
+          // İnce silindir pin
+          var pinGeo=new THREE.CylinderGeometry(1.5,1.5,8,6);
+          var pinMat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.9});
+          var pin=new THREE.Mesh(pinGeo,pinMat);
+          pin.position.set(px,4,pz);
+          scene.add(pin);
+          // Üst top
+          var dotGeo=new THREE.SphereGeometry(2.5,6,6);
+          var dot=new THREE.Mesh(dotGeo,new THREE.MeshLambertMaterial({color:col}));
+          dot.position.set(px,9,pz);
+          scene.add(dot);
+          // Küçük ışık
+          var pl=new THREE.PointLight(col,0.8,30);
+          pl.position.set(px,12,pz);
+          scene.add(pl);
+        });
       });
 
       // Kontroller
@@ -3521,7 +3570,7 @@ var View3D=function(props){
     };
   },[]);
 
-  return React.createElement('div',{style:{position:'relative',width:'100%',height:'100%',background:'#050d1a',overflow:'hidden'}},
+  return React.createElement('div',{style:{position:'fixed',inset:0,background:'#050d1a',overflow:'hidden',zIndex:9999}},
     React.createElement('div',{ref:mountRef,style:{width:'100%',height:'100%'}}),
     status?React.createElement('div',{style:{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(5,13,26,.85)',border:'1px solid #1e3a5f',borderRadius:8,padding:'6px 16px',color:'#60a5fa',fontSize:12,pointerEvents:'none'}},status):null,
     React.createElement('div',{style:{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}},
