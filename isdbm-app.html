@@ -1180,7 +1180,7 @@ const FinansmanHesap=({alt,parcel})=>{
 
     {/* Tab bar */}
     <div style={{display:'flex',gap:6,marginBottom:16,borderBottom:'1px solid #f1f5f9',paddingBottom:10}}>
-      {[['ozet','📊 Özet'],['parametreler','⚙️ Parametreler'],['projeksiyon',`📈 ${projYil} Yıl`],['proforma','💼 Pro-Forma']].map(([k,l])=>(
+      {[['ozet','📊 Özet'],['parametreler','⚙️ Parametreler'],['projeksiyon',`📈 ${projYil} Yıl`],['proforma','💼 Pro-Forma'],['montecarlo','🎲 Risk']].map(([k,l])=>(
         <button key={k} onClick={()=>setActiveTab(k)}
           style={{padding:'5px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:'none',
             background:activeTab===k?'#2563eb':'#f8fafc',color:activeTab===k?'#fff':'#374151'}}>
@@ -1496,6 +1496,18 @@ const FinansmanHesap=({alt,parcel})=>{
         🏁 Son yıl = çıkış yılı • 🟢 Yeşil = kümülatif pozitif • MOIC: {moic}x • IRR: %{irr}
       </div>
     </div>}
+
+    {/* Monte Carlo Risk Analizi */}
+    {activeTab==='montecarlo'&&<MonteCarloPanel
+      capex={capex}
+      ozkaynakOran={ozkaynakOran}
+      krediFaiz={krediFaiz}
+      krediVade={krediVade}
+      yillikGetiriOran={yillikGetiriOran}
+      projYil={projYil}
+      parcel={parcel}
+      alt={alt}
+    />}
 
     <div style={{marginTop:14,fontSize:10,color:'#94a3b8',textAlign:'center'}}>
       AssetRevitalization + Pro-Forma Investment Engine metodolojisi • Tahmini değerler, yatırım tavsiyesi değildir
@@ -3819,6 +3831,288 @@ window.ISDBM_BIM = {
     this.callbacks.push(cb);
     if(this.ready) cb(this.model);
   },
+};
+
+
+// ── Monte Carlo Risk Analizi ─────────────────────────────────────────────
+function runMonteCarlo(params, simCount){
+  const {capex, ozkaynakOran, krediFaiz, krediVade, yillikGetiriOran, projYil} = params;
+
+  // Değişken aralıkları — gerçekçi gayrimenkul risk bandları
+  const ranges = {
+    getiriOran:  {mean: yillikGetiriOran,   std: yillikGetiriOran * 0.25},  // ±%25
+    capexArtis:  {mean: 1.0,                std: 0.12},   // inşaat maliyet riski ±%12
+    boşlukOran:  {mean: 0.05,               std: 0.04},   // kira boşluğu %5 ±%4
+    exitCapRate: {mean: 0.07,               std: 0.015},  // çıkış cap rate %7 ±%1.5
+    faizRisk:    {mean: krediFaiz,          std: krediFaiz * 0.15}, // faiz riski ±%15
+  };
+
+  // Box-Muller normal dağılım
+  function randNorm(mean, std){
+    let u=0,v=0;
+    while(!u)u=Math.random();
+    while(!v)v=Math.random();
+    return mean + std * Math.sqrt(-2*Math.log(u)) * Math.cos(2*Math.PI*v);
+  }
+
+  function calcNPV(rate, cfs){
+    return cfs.reduce((npv,cf,t)=>npv+cf/Math.pow(1+rate,t),0);
+  }
+  function calcIRR(cfs){
+    let rate=0.1;
+    for(let i=0;i<100;i++){
+      const npv=calcNPV(rate,cfs);
+      const dNpv=cfs.reduce((s,cf,t)=>t===0?s:s-t*cf/Math.pow(1+rate,t+1),0);
+      if(Math.abs(dNpv)<1e-10)break;
+      const nr=rate-npv/dNpv;
+      if(Math.abs(nr-rate)<1e-6){rate=nr;break;}
+      rate=Math.max(-0.99,Math.min(9.99,nr));
+    }
+    return isFinite(rate)&&rate>-0.99&&rate<9.99?rate*100:null;
+  }
+
+  const results = [];
+  for(let s=0;s<simCount;s++){
+    // Rastgele değişkenler
+    const getiri   = Math.max(0, randNorm(ranges.getiriOran.mean, ranges.getiriOran.std));
+    const capexCok = Math.max(0.7, randNorm(ranges.capexArtis.mean, ranges.capexArtis.std));
+    const boslluk  = Math.max(0, Math.min(0.5, randNorm(ranges.boşlukOran.mean, ranges.boşlukOran.std)));
+    const capRate  = Math.max(0.03, randNorm(ranges.exitCapRate.mean, ranges.exitCapRate.std));
+    const faiz     = Math.max(1, randNorm(ranges.faizRisk.mean, ranges.faizRisk.std));
+
+    const simCapex   = Math.round(capex * capexCok);
+    const ozk        = Math.round(simCapex * (ozkaynakOran/100));
+    const krd        = simCapex - ozk;
+    const ayFaiz     = faiz/100/12;
+    const topAy      = krediVade*12;
+    const taksit     = krd>0&&ayFaiz>0 ? krd*(ayFaiz*Math.pow(1+ayFaiz,topAy))/(Math.pow(1+ayFaiz,topAy)-1) : 0;
+    const yilTaksit  = taksit*12;
+
+    // Yıllık nakit akışları
+    const cfs = [-ozk];
+    let kumulatif = -ozk;
+    for(let y=1;y<=projYil;y++){
+      const gelir = simCapex * (getiri/100) * (1-boslluk);
+      const net   = gelir - yilTaksit;
+      cfs.push(net);
+      kumulatif += net;
+    }
+    // Exit değeri
+    const yillikNOI  = simCapex*(getiri/100)*(1-boslluk);
+    const exitDeger  = yillikNOI/capRate;
+    const exitNet    = exitDeger - (krd>0?krd*0.6:0); // kalan kredi
+    cfs[cfs.length-1] += exitNet;
+
+    const irr = calcIRR(cfs);
+    const npv = calcNPV(0.12, cfs); // %12 iskonto
+
+    results.push({
+      irr: irr!==null?irr:null,
+      npv: npv/1e6, // Milyon TL
+      exitDeger: exitDeger/1e6,
+      getiri, capexCok, boslluk,
+      karlimi: kumulatif+exitNet>0,
+    });
+  }
+
+  // İstatistikler
+  const irrVals = results.filter(r=>r.irr!==null).map(r=>r.irr).sort((a,b)=>a-b);
+  const npvVals = results.map(r=>r.npv).sort((a,b)=>a-b);
+  const n = results.length;
+  const karliSayisi = results.filter(r=>r.karlimi).length;
+
+  function percentile(arr, p){ return arr[Math.floor(arr.length*p/100)]||0; }
+  function mean(arr){ return arr.reduce((s,v)=>s+v,0)/arr.length; }
+
+  return {
+    simCount: n,
+    karliolasilik: Math.round(karliSayisi/n*100),
+    irr: {
+      p10: percentile(irrVals,10).toFixed(1),
+      p25: percentile(irrVals,25).toFixed(1),
+      p50: percentile(irrVals,50).toFixed(1),
+      p75: percentile(irrVals,75).toFixed(1),
+      p90: percentile(irrVals,90).toFixed(1),
+      mean: mean(irrVals).toFixed(1),
+      negatif: Math.round(irrVals.filter(v=>v<0).length/irrVals.length*100),
+    },
+    npv: {
+      p10: percentile(npvVals,10).toFixed(1),
+      p25: percentile(npvVals,25).toFixed(1),
+      p50: percentile(npvVals,50).toFixed(1),
+      p75: percentile(npvVals,75).toFixed(1),
+      p90: percentile(npvVals,90).toFixed(1),
+      mean: mean(npvVals).toFixed(1),
+      negatif: Math.round(npvVals.filter(v=>v<0).length/npvVals.length*100),
+    },
+    histogram: buildHistogram(irrVals),
+    rawResults: results,
+  };
+}
+
+function buildHistogram(vals){
+  if(!vals.length)return[];
+  const min=Math.min(...vals),max=Math.max(...vals);
+  const bins=15;
+  const step=(max-min)/bins||1;
+  const hist=Array.from({length:bins},(_,i)=>({
+    x:(min+i*step).toFixed(1),
+    count:0,
+    pct:0,
+  }));
+  vals.forEach(v=>{
+    const i=Math.min(bins-1,Math.floor((v-min)/step));
+    hist[i].count++;
+  });
+  const maxCount=Math.max(...hist.map(h=>h.count));
+  hist.forEach(h=>{h.pct=Math.round(h.count/vals.length*100);h.barH=Math.round(h.count/maxCount*100);});
+  return hist;
+}
+
+const MonteCarloPanel=({capex,ozkaynakOran,krediFaiz,krediVade,yillikGetiriOran,projYil,parcel,alt})=>{
+  const [result,setResult]=React.useState(null);
+  const [running,setRunning]=React.useState(false);
+  const [simCount,setSimCount]=React.useState(2000);
+
+  function run(){
+    setRunning(true);
+    setTimeout(()=>{
+      const r=runMonteCarlo({capex,ozkaynakOran,krediFaiz,krediVade,yillikGetiriOran,projYil},simCount);
+      setResult(r);
+      setRunning(false);
+    },50);
+  }
+
+  const riskRenk = r=>r>=80?'#16a34a':r>=60?'#2563eb':r>=40?'#f59e0b':'#ef4444';
+  const irrRenk  = v=>parseFloat(v)>=20?'#16a34a':parseFloat(v)>=12?'#2563eb':parseFloat(v)>=0?'#f59e0b':'#ef4444';
+
+  return <div style={{padding:'4px 0'}}>
+    {/* Başlık + Çalıştır */}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+      <div>
+        <div style={{fontWeight:700,fontSize:14}}>🎲 Monte Carlo Risk Analizi</div>
+        <div style={{fontSize:11,color:'#64748b',marginTop:2}}>
+          Getiri, maliyet, boşluk ve faiz belirsizliği simülasyonu
+        </div>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'flex-end'}}>
+        <select value={simCount} onChange={e=>setSimCount(parseInt(e.target.value))}
+          style={{fontSize:11,padding:'3px 6px',borderRadius:5,border:'1px solid #e2e8f0'}}>
+          {[500,1000,2000,5000].map(n=><option key={n} value={n}>{n.toLocaleString()} simülasyon</option>)}
+        </select>
+        <button onClick={run} disabled={running}
+          style={{background:running?'#64748b':'#2563eb',color:'#fff',border:'none',
+            padding:'7px 16px',borderRadius:7,fontSize:12,fontWeight:700,cursor:running?'wait':'pointer'}}>
+          {running?'⏳ Hesaplanıyor...':'▶ Simülasyonu Çalıştır'}
+        </button>
+      </div>
+    </div>
+
+    {/* Risk değişkenleri açıklaması */}
+    <div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:8,padding:'8px 12px',marginBottom:12,fontSize:11}}>
+      <div style={{fontWeight:600,color:'#92400e',marginBottom:4}}>📊 Simülasyon Değişkenleri</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4,color:'#78350f'}}>
+        <span>📈 Getiri oranı: %{(yillikGetiriOran*0.75).toFixed(0)} - %{(yillikGetiriOran*1.25).toFixed(0)}</span>
+        <span>🏗️ Maliyet riski: %±12</span>
+        <span>🏠 Kira boşluğu: %1 - %13</span>
+        <span>💰 Faiz riski: %±15</span>
+        <span>📉 Exit cap rate: %{(7-1.5).toFixed(1)} - %{(7+1.5).toFixed(1)}</span>
+        <span>⏱️ Süre: {projYil} yıl</span>
+      </div>
+    </div>
+
+    {result&&<>
+      {/* Kârlılık olasılığı — ana metrik */}
+      <div style={{background:'linear-gradient(135deg,#f0fdf4,#dcfce7)',border:'1px solid #86efac',
+        borderRadius:10,padding:'12px 16px',marginBottom:12,textAlign:'center'}}>
+        <div style={{fontSize:12,color:'#166534',marginBottom:4}}>Kârlılık Olasılığı</div>
+        <div style={{fontSize:36,fontWeight:900,color:riskRenk(result.karliolasilik)}}>
+          %{result.karliolasilik}
+        </div>
+        <div style={{fontSize:11,color:'#64748b'}}>
+          {result.simCount.toLocaleString()} simülasyondan {Math.round(result.karliolasilik*result.simCount/100).toLocaleString()} kârlı
+        </div>
+      </div>
+
+      {/* IRR Dağılımı */}
+      <div style={{background:'#f8fafc',borderRadius:8,padding:'10px 12px',marginBottom:10}}>
+        <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>📈 IRR Dağılımı (İç Verim Oranı)</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:4,marginBottom:8}}>
+          {[['P10','Kötümser',result.irr.p10],['P25','',result.irr.p25],['P50','Medyan',result.irr.p50],['P75','',result.irr.p75],['P90','İyimser',result.irr.p90]].map(([p,lbl,val])=>(
+            <div key={p} style={{textAlign:'center',background:'#fff',borderRadius:6,padding:'6px 4px',border:'1px solid #e2e8f0'}}>
+              <div style={{fontSize:9,color:'#94a3b8'}}>{p}{lbl?' · '+lbl:''}</div>
+              <div style={{fontSize:14,fontWeight:700,color:irrRenk(val)}}>%{val}</div>
+            </div>
+          ))}
+        </div>
+        {/* Histogram */}
+        <div style={{display:'flex',alignItems:'flex-end',gap:1,height:60,marginTop:4}}>
+          {result.histogram.map((b,i)=>{
+            const col=parseFloat(b.x)<0?'#ef4444':parseFloat(b.x)<12?'#f59e0b':parseFloat(b.x)<20?'#2563eb':'#16a34a';
+            return <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1}}>
+              <div style={{width:'100%',background:col,height:b.barH*0.56+'px',borderRadius:'2px 2px 0 0',opacity:0.85}}
+                title={`%${b.x}: ${b.count} simülasyon (%${b.pct})`}/>
+            </div>;
+          })}
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'#94a3b8',marginTop:2}}>
+          <span>%{result.histogram[0]?.x} (En kötü)</span>
+          <span>IRR Dağılımı</span>
+          <span>%{result.histogram[result.histogram.length-1]?.x} (En iyi)</span>
+        </div>
+        <div style={{fontSize:10,color:'#64748b',marginTop:4,textAlign:'center'}}>
+          Ortalama IRR: <b style={{color:irrRenk(result.irr.mean)}}>%{result.irr.mean}</b>
+          {' · '}Negatif olasılık: <b style={{color:'#ef4444'}}>%{result.irr.negatif}</b>
+        </div>
+      </div>
+
+      {/* NPV Dağılımı */}
+      <div style={{background:'#f8fafc',borderRadius:8,padding:'10px 12px',marginBottom:10}}>
+        <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>💰 NPV Dağılımı (%12 iskonto, M TL)</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:4}}>
+          {[['P10','Kötümser',result.npv.p10],['P25','',result.npv.p25],['P50','Medyan',result.npv.p50],['P75','',result.npv.p75],['P90','İyimser',result.npv.p90]].map(([p,lbl,val])=>(
+            <div key={p} style={{textAlign:'center',background:'#fff',borderRadius:6,padding:'6px 4px',border:'1px solid #e2e8f0'}}>
+              <div style={{fontSize:9,color:'#94a3b8'}}>{p}{lbl?' · '+lbl:''}</div>
+              <div style={{fontSize:13,fontWeight:700,color:parseFloat(val)>=0?'#16a34a':'#ef4444'}}>
+                {parseFloat(val)>=0?'+':''}{val}M
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{fontSize:10,color:'#64748b',marginTop:6,textAlign:'center'}}>
+          Ortalama NPV: <b style={{color:parseFloat(result.npv.mean)>=0?'#16a34a':'#ef4444'}}>
+            {parseFloat(result.npv.mean)>=0?'+':''}{result.npv.mean}M TL
+          </b>
+          {' · '}Negatif NPV: <b style={{color:'#ef4444'}}>%{result.npv.negatif}</b>
+        </div>
+      </div>
+
+      {/* Risk yorumu */}
+      <div style={{background:result.karliolasilik>=80?'#f0fdf4':result.karliolasilik>=60?'#eff6ff':result.karliolasilik>=40?'#fffbeb':'#fef2f2',
+        border:'1px solid '+(result.karliolasilik>=80?'#86efac':result.karliolasilik>=60?'#bfdbfe':result.karliolasilik>=40?'#fde68a':'#fecaca'),
+        borderRadius:8,padding:'10px 12px',fontSize:11}}>
+        <div style={{fontWeight:600,marginBottom:4}}>
+          {result.karliolasilik>=80?'✅ Düşük Risk':''}
+          {result.karliolasilik>=60&&result.karliolasilik<80?'🟡 Orta Risk':''}
+          {result.karliolasilik>=40&&result.karliolasilik<60?'⚠️ Yüksek Risk':''}
+          {result.karliolasilik<40?'🔴 Çok Yüksek Risk':''}
+          {' — '}Yatırım Değerlendirmesi
+        </div>
+        <div style={{color:'#475569',lineHeight:1.5}}>
+          {result.karliolasilik>=80&&`${simCount} simülasyonun %${result.karliolasilik}'i kârlı. Medyan IRR %${result.irr.p50} ile güçlü. Yatırım koşulları elverişli.`}
+          {result.karliolasilik>=60&&result.karliolasilik<80&&`Simülasyonların %${result.karliolasilik}'i kârlı. Makul risk seviyesi. Faiz ve maliyet risklerini yakından izleyin.`}
+          {result.karliolasilik>=40&&result.karliolasilik<60&&`Risk yüksek — simülasyonların %${100-result.karliolasilik}'i zarar. Özkaynak oranını artırın veya getiri hedefini gözden geçirin.`}
+          {result.karliolasilik<40&&`Kritik risk — simülasyonların %${100-result.karliolasilik}'i zarar. Bu koşullarda yatırım tavsiye edilmez. Parametreleri köklü değiştirin.`}
+        </div>
+      </div>
+    </>}
+
+    {!result&&!running&&<div style={{textAlign:'center',padding:'24px 0',color:'#94a3b8'}}>
+      <div style={{fontSize:32,marginBottom:8}}>🎲</div>
+      <div style={{fontSize:13,marginBottom:4}}>Simülasyonu başlatmak için butona basın</div>
+      <div style={{fontSize:11}}>Getiri, maliyet, boşluk ve faiz değişkenliği modellenir</div>
+    </div>}
+  </div>;
 };
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
