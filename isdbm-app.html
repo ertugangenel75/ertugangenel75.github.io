@@ -3718,10 +3718,9 @@ var View3D=function(props){
               'fill-extrusion-base':0,
               'fill-extrusion-opacity':0.9,
               'fill-extrusion-vertical-gradient':true,
-              'fill-extrusion-ambient-occlusion-intensity':0.3,
+
             }
           });
-          map.setLayoutProperty(lid,'visibility','visible');
           console.log('Parsel layer eklendi:',lid,'height:',baseH,'coords:',ring.length);
 
           // Parsel marker
@@ -3825,7 +3824,7 @@ var View3D=function(props){
           React.createElement('span',{style:{fontSize:10,color:'#94a3b8'}},'📐 Eğim Açısı'),
           React.createElement('span',{style:{fontSize:10,color:'#fff',fontWeight:600}},pitch+'°')
         ),
-        React.createElement('input',{type:'range',min:0,max:85,step:5,value:pitch,
+        React.createElement('input',{type:'range',min:20,max:85,step:5,value:pitch,
           onChange:function(e){setPitch(parseInt(e.target.value));},
           style:{width:'100%',accentColor:'#2563eb'}})
       ),
@@ -3855,7 +3854,38 @@ var View3D=function(props){
             return React.createElement('button',{key:style,
               onClick:function(){
                 if(mapRef.current){
+                  var curPitch=mapRef.current.getPitch();
+                  var curBearing=mapRef.current.getBearing();
+                  var curCenter=mapRef.current.getCenter();
+                  var curZoom=mapRef.current.getZoom();
                   mapRef.current.setStyle('https://api.maptiler.com/maps/'+style+'/style.json?key='+MAPTILER_KEY);
+                  mapRef.current.once('styledata',function(){
+                    mapRef.current.setPitch(curPitch);
+                    mapRef.current.setBearing(curBearing);
+                    // Style değişince layer'lar siliniyor — yeniden ekle
+                    parcels.forEach(function(p,i){
+                      var plan=p.planDurumu||'Belirsiz';
+                      var baseH=IMAR_YUK[plan]||20;
+                      var col=IMAR_COL[plan]||'#94a3b8';
+                      var sid='parsel-src-'+i;
+                      var lid='parsel-'+i;
+                      if(mapRef.current.getSource(sid))return; // Zaten var
+                      var coords=p.coords||p.coordinates||[];
+                      var pc=v3dCtr(p);if(!pc)return;
+                      var ring;
+                      if(coords.length>=3){
+                        ring=coords.map(function(c){return[parseFloat(c[1]),parseFloat(c[0])];});
+                        if(ring[0][0]!==ring[ring.length-1][0])ring.push(ring[0]);
+                      }else{
+                        var alan=parseFloat(p.alan)||500;
+                        var half=Math.max(Math.sqrt(alan),50)/2/111320;
+                        var lngHalf=half/Math.cos(pc[1]*Math.PI/180);
+                        ring=[[pc[0]-lngHalf,pc[1]-half],[pc[0]+lngHalf,pc[1]-half],[pc[0]+lngHalf,pc[1]+half],[pc[0]-lngHalf,pc[1]+half],[pc[0]-lngHalf,pc[1]-half]];
+                      }
+                      mapRef.current.addSource(sid,{type:'geojson',data:{type:'Feature',geometry:{type:'Polygon',coordinates:[ring]}}});
+                      mapRef.current.addLayer({id:lid,type:'fill-extrusion',source:sid,minzoom:5,paint:{'fill-extrusion-color':col,'fill-extrusion-height':baseH,'fill-extrusion-base':0,'fill-extrusion-opacity':0.9,'fill-extrusion-vertical-gradient':true}});
+                    });
+                  });
                 }
               },
               style:{fontSize:9,padding:'3px 6px',borderRadius:4,background:'#1e3a5f',color:'#fff',border:'none',cursor:'pointer',flex:1}
