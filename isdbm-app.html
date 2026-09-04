@@ -4145,11 +4145,24 @@ var View3D=function(props){
       React.createElement('button',{onClick:onClose,style:{background:'rgba(0,0,0,.85)',color:'#fff',border:'1px solid #334155',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},'← 2D Harita'),
       React.createElement('button',{onClick:function(){setRotating(function(r){return !r;});},style:{background:'rgba(0,0,0,.85)',color:rotating?'#fbbf24':'#475569',border:'1px solid #334155',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},rotating?'⏸ Durdur':'▶ Döndür'),
       React.createElement('button',{onClick:function(){setPanelOpen(function(o){return !o;});},style:{background:panelOpen?'rgba(37,99,235,.3)':'rgba(0,0,0,.85)',color:panelOpen?'#60a5fa':'#94a3b8',border:'1px solid '+(panelOpen?'#2563eb':'#334155'),padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},'⚙️ Düzenle'),
-      // BIM Yükle butonu
-      React.createElement('label',{style:{background:'rgba(124,58,237,.3)',color:'#a78bfa',border:'1px solid #7c3aed',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer',fontWeight:600,textAlign:'center'},title:'GLB, OBJ+MTL, FBX veya IFC yükle'},
-        '🏗️ BIM Yükle',
-        React.createElement('input',{type:'file',multiple:true,accept:'.glb,.gltf,.obj,.mtl,.fbx,.ifc',ref:fileInputRef,onChange:handleBIMFiles,style:{display:'none'}})
-      ),
+      // BIM Yükle butonu — programatik input (MapLibre canvas bloke sorunu bypass)
+      React.createElement('button',{
+        style:{background:'rgba(124,58,237,.3)',color:'#a78bfa',border:'1px solid #7c3aed',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer',fontWeight:600,textAlign:'center'},
+        title:'GLB, OBJ+MTL, FBX veya IFC yükle',
+        onClick:function(){
+          var inp=document.createElement('input');
+          inp.type='file';
+          inp.multiple=true;
+          inp.accept='.glb,.gltf,.obj,.mtl,.fbx,.ifc';
+          inp.style.display='none';
+          document.body.appendChild(inp);
+          inp.addEventListener('change',function(){
+            handleBIMFiles({target:{files:inp.files}});
+            document.body.removeChild(inp);
+          });
+          inp.click();
+        }
+      },'🏗️ BIM Yükle'),
       // BIM yüklendiyse bilgi + temizle
       bimInfo?React.createElement('div',{style:{background:'rgba(124,58,237,.2)',border:'1px solid #7c3aed',borderRadius:8,padding:'5px 10px',fontSize:10,color:'#c4b5fd'}},
         React.createElement('div',{style:{fontWeight:600,marginBottom:2}},'✅ '+bimInfo.tip),
