@@ -3940,14 +3940,13 @@ function bimLoadModel(files, onModel, onStatus){
 function createBIMLayer(map, THREE, model, lngLat){
   if(map.getLayer('bim-layer'))map.removeLayer('bim-layer');
 
-  // Model normalize — merkeze oturt, boyutla
+  // Model normalize
   var box=new THREE.Box3().setFromObject(model);
   var size=box.getSize(new THREE.Vector3());
   var center=box.getCenter(new THREE.Vector3());
   model.position.sub(center);
-  model.position.y+=size.y/2; // zemine oturt
+  model.position.y+=size.y/2;
   var maxDim=Math.max(size.x,size.y,size.z);
-  // Hedef: 50m boyutunda görünsün
   var targetSize=50;
   if(maxDim>0)model.scale.multiplyScalar(targetSize/maxDim);
 
@@ -3956,9 +3955,11 @@ function createBIMLayer(map, THREE, model, lngLat){
   var sun=new THREE.DirectionalLight(0xfff5e0,0.8);sun.position.set(1,2,1).normalize();scene.add(sun);
   scene.add(model);
 
-  var mc=window.maplibregl.MercatorCoordinate.fromLngLat(lngLat,0);
-  var mScale=mc.meterInMercatorCoordinateUnits();
+  // Transform state — window üzerinden güncellenir
+  window.BIM_TRANSFORM = window.BIM_TRANSFORM || {offX:0,offZ:0,offY:0,rotY:0,scale:1};
 
+  var mc0=window.maplibregl.MercatorCoordinate.fromLngLat(lngLat,0);
+  var mScale=mc0.meterInMercatorCoordinateUnits();
   var camera=new THREE.Camera();
   var renderer=null;
 
@@ -3967,31 +3968,36 @@ function createBIMLayer(map, THREE, model, lngLat){
     type:'custom',
     renderingMode:'3d',
     onAdd:function(map,gl){
-      // MapLibre'nin canvas + context'ini paylaş
-      renderer=new THREE.WebGLRenderer({
-        canvas:map.getCanvas(),
-        context:gl,
-        antialias:true
-      });
+      renderer=new THREE.WebGLRenderer({canvas:map.getCanvas(),context:gl,antialias:true});
       renderer.autoClear=false;
     },
     render:function(gl,matrix){
-      // Koordinat dönüşümü — rotasyon + ölçek + konum
+      var tr=window.BIM_TRANSFORM;
+      // Metre cinsinden offset → derece dönüşümü
+      var mPerDegLat=111320;
+      var mPerDegLng=111320*Math.cos(lngLat.lat*Math.PI/180);
+      var offLng=lngLat.lng + tr.offX/mPerDegLng;
+      var offLat=lngLat.lat + (-tr.offZ)/mPerDegLat;
+      var alt=tr.offY;
+      var mc=window.maplibregl.MercatorCoordinate.fromLngLat({lng:offLng,lat:offLat},alt);
+      var sc=mc.meterInMercatorCoordinateUnits()*tr.scale;
+      // Rotasyon matisleri
       var rotX=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1,0,0),Math.PI/2);
+      var rotY=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0,1,0),tr.rotY*Math.PI/180);
       var m=new THREE.Matrix4()
         .makeTranslation(mc.x,mc.y,mc.z)
-        .scale(new THREE.Vector3(mScale,-mScale,mScale))
+        .scale(new THREE.Vector3(sc,-sc,sc))
+        .multiply(rotY)
         .multiply(rotX);
       camera.projectionMatrix=new THREE.Matrix4().fromArray(matrix).multiply(m);
       renderer.resetState();
       renderer.render(scene,camera);
       map.triggerRepaint();
     },
-    onRemove:function(){
-      if(renderer)renderer.dispose();
-    }
+    onRemove:function(){if(renderer)renderer.dispose();}
   });
 }
+
 
 var View3D=function(props){
   var parcels=props.parcels||[];
@@ -4008,6 +4014,12 @@ var View3D=function(props){
   var s6=React.useState(true),rotating=s6[0],setRotating=s6[1];
   var s7=React.useState(null),bimInfo=s7[0],setBimInfo=s7[1];
   var s8=React.useState(false),showTerrain=s8[0],setShowTerrain=s8[1];
+  // BIM Transform state
+  var sb1=React.useState(0),bimOffX=sb1[0],setBimOffX=sb1[1];
+  var sb2=React.useState(0),bimOffZ=sb2[0],setBimOffZ=sb2[1];
+  var sb3=React.useState(0),bimOffY=sb3[0],setBimOffY=sb3[1];
+  var sb4=React.useState(0),bimRotY=sb4[0],setBimRotY=sb4[1];
+  var sb5=React.useState(1),bimScale=sb5[0],setBimScale=sb5[1];
   var rotRef=React.useRef(null);
   var terrainRef=React.useRef(false);
 
@@ -4015,6 +4027,14 @@ var View3D=function(props){
     if(!mapRef.current)return;
     mapRef.current.setPitch(pitch);
   },[pitch]);
+
+  // BIM transform değişince güncelle
+  React.useEffect(function(){
+    window.BIM_TRANSFORM={offX:bimOffX,offZ:bimOffZ,offY:bimOffY,rotY:bimRotY,scale:bimScale};
+    if(mapRef.current&&mapRef.current.getLayer('bim-layer')){
+      mapRef.current.triggerRepaint();
+    }
+  },[bimOffX,bimOffZ,bimOffY,bimRotY,bimScale]);
 
   React.useEffect(function(){
     if(!mapRef.current)return;
@@ -4043,6 +4063,9 @@ var View3D=function(props){
         var ctr=null;for(var i=0;i<parcels.length;i++){var c=v3dCtr(parcels[i]);if(c){ctr=c;break;}}
         if(!ctr){setStatus('Koordinat bulunamadı');return;}
         if(mapRef.current){
+          // Transform sıfırla
+          window.BIM_TRANSFORM={offX:0,offZ:0,offY:0,rotY:0,scale:1};
+          setBimOffX(0);setBimOffZ(0);setBimOffY(0);setBimRotY(0);setBimScale(1);
           createBIMLayer(mapRef.current,THREE,model,{lng:ctr[0],lat:ctr[1]});
           setBimInfo({tip:tip,ad:ad});
           setStatus('');
@@ -4170,6 +4193,62 @@ var View3D=function(props){
         React.createElement('button',{onClick:function(){if(mapRef.current&&mapRef.current.getLayer('bim-layer'))mapRef.current.removeLayer('bim-layer');setBimInfo(null);},style:{width:'100%',background:'rgba(239,68,68,.2)',color:'#fca5a5',border:'1px solid rgba(239,68,68,.3)',borderRadius:5,padding:'3px 0',fontSize:10,cursor:'pointer'}},'🗑️ Kaldır')
       ):null
     ),
+
+    // BIM Transform paneli — ⚙️ Düzenle panelinde bimInfo varsa göster
+    panelOpen&&bimInfo?React.createElement('div',{style:{position:'absolute',bottom:80,right:12,zIndex:10,background:'rgba(0,0,0,.92)',border:'1px solid #7c3aed',borderRadius:12,padding:14,width:210,marginTop:8}},
+      React.createElement('div',{style:{fontSize:11,color:'#a78bfa',fontWeight:700,marginBottom:10}},'🏗️ BIM Konumlandırma'),
+      // Sağ/Sol
+      React.createElement('div',{style:{marginBottom:7}},
+        React.createElement('div',{style:{fontSize:9,color:'#64748b',marginBottom:3}},'↔️ Sağ / Sol (m)'),
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:4}},
+          React.createElement('button',{onClick:function(){setBimOffX(function(v){return v-5;});},style:{background:'#1e3a5f',color:'#fff',border:'none',borderRadius:5,width:28,height:28,fontSize:13,cursor:'pointer',flexShrink:0}},'◀'),
+          React.createElement('span',{style:{fontSize:10,color:'#fff',fontWeight:600,minWidth:36,textAlign:'center'}},bimOffX+'m'),
+          React.createElement('button',{onClick:function(){setBimOffX(function(v){return v+5;});},style:{background:'#1e3a5f',color:'#fff',border:'none',borderRadius:5,width:28,height:28,fontSize:13,cursor:'pointer',flexShrink:0}},'▶')
+        )
+      ),
+      // İleri/Geri
+      React.createElement('div',{style:{marginBottom:7}},
+        React.createElement('div',{style:{fontSize:9,color:'#64748b',marginBottom:3}},'↕️ İleri / Geri (m)'),
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:4}},
+          React.createElement('button',{onClick:function(){setBimOffZ(function(v){return v-5;});},style:{background:'#1e3a5f',color:'#fff',border:'none',borderRadius:5,width:28,height:28,fontSize:13,cursor:'pointer',flexShrink:0}},'▲'),
+          React.createElement('span',{style:{fontSize:10,color:'#fff',fontWeight:600,minWidth:36,textAlign:'center'}},bimOffZ+'m'),
+          React.createElement('button',{onClick:function(){setBimOffZ(function(v){return v+5;});},style:{background:'#1e3a5f',color:'#fff',border:'none',borderRadius:5,width:28,height:28,fontSize:13,cursor:'pointer',flexShrink:0}},'▼')
+        )
+      ),
+      // Yukarı/Aşağı
+      React.createElement('div',{style:{marginBottom:7}},
+        React.createElement('div',{style:{fontSize:9,color:'#64748b',marginBottom:3}},'⬆️ Yukarı / Aşağı (m)'),
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:4}},
+          React.createElement('button',{onClick:function(){setBimOffY(function(v){return v-5;});},style:{background:'#1e3a5f',color:'#fff',border:'none',borderRadius:5,width:28,height:28,fontSize:13,cursor:'pointer',flexShrink:0}},'⬇'),
+          React.createElement('span',{style:{fontSize:10,color:'#fff',fontWeight:600,minWidth:36,textAlign:'center'}},bimOffY+'m'),
+          React.createElement('button',{onClick:function(){setBimOffY(function(v){return v+5;});},style:{background:'#1e3a5f',color:'#fff',border:'none',borderRadius:5,width:28,height:28,fontSize:13,cursor:'pointer',flexShrink:0}},'⬆')
+        )
+      ),
+      // Döndür
+      React.createElement('div',{style:{marginBottom:7}},
+        React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+          React.createElement('span',{style:{fontSize:9,color:'#64748b'}},'🔄 Döndür'),
+          React.createElement('span',{style:{fontSize:9,color:'#fff',fontWeight:600}},bimRotY+'°')
+        ),
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:4}},
+          React.createElement('button',{onClick:function(){setBimRotY(function(v){return (v-15+360)%360;});},style:{background:'#1e3a5f',color:'#fff',border:'none',borderRadius:5,width:28,height:28,fontSize:13,cursor:'pointer',flexShrink:0}},'↺'),
+          React.createElement('input',{type:'range',min:0,max:360,step:5,value:bimRotY,onChange:function(e){setBimRotY(parseInt(e.target.value));},style:{flex:1,accentColor:'#7c3aed'}}),
+          React.createElement('button',{onClick:function(){setBimRotY(function(v){return (v+15)%360;});},style:{background:'#1e3a5f',color:'#fff',border:'none',borderRadius:5,width:28,height:28,fontSize:13,cursor:'pointer',flexShrink:0}},'↻')
+        )
+      ),
+      // Ölçek
+      React.createElement('div',{style:{marginBottom:10}},
+        React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+          React.createElement('span',{style:{fontSize:9,color:'#64748b'}},'🔍 Ölçek'),
+          React.createElement('span',{style:{fontSize:9,color:'#fff',fontWeight:600}},'x'+bimScale.toFixed(1))
+        ),
+        React.createElement('input',{type:'range',min:0.1,max:5,step:0.1,value:bimScale,onChange:function(e){setBimScale(parseFloat(e.target.value));},style:{width:'100%',accentColor:'#7c3aed'}})
+      ),
+      React.createElement('button',{
+        onClick:function(){setBimOffX(0);setBimOffZ(0);setBimOffY(0);setBimRotY(0);setBimScale(1);},
+        style:{width:'100%',background:'rgba(239,68,68,.15)',color:'#fca5a5',border:'1px solid rgba(239,68,68,.3)',borderRadius:6,padding:'5px 0',fontSize:10,cursor:'pointer',fontWeight:600}
+      },'↩ Sıfırla')
+    ):null,
 
     // Sol üst lejant
     React.createElement('div',{style:{position:'absolute',top:12,left:12,zIndex:10,background:'rgba(0,0,0,.75)',border:'1px solid #334155',borderRadius:8,padding:'8px 12px'}},
