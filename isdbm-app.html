@@ -3156,7 +3156,7 @@ const App=()=>{
           </div>}
 
           {/* Terrain + Landuse */}
-          {p.lat&&p.lng&&<TerrainLanduse parcel={p} apiUrl={BACKEND_URL}/>}
+          {p.lat&&p.lng&&<TerrainLanduse parcel={p}/>}
 
           {/* Alternatives */}
           <div className="card">
@@ -3285,154 +3285,216 @@ const App=()=>{
 
 const BACKEND_URL='https://argeplano-isdbm.onrender.com';
 
-const TerrainLanduse = ({parcel, apiUrl}) => {
-  const [terrain, setTerrain] = React.useState(null);
-  const [landuse, setLanduse] = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
-  const [radius, setRadius] = React.useState(1000);
+const TerrainLanduse = ({parcel}) => {
+  const [terrain, setTerrain]   = React.useState(null);
+  const [landuse, setLanduse]   = React.useState(null);
+  const [loading, setLoading]   = React.useState(false);
+  const [radius, setRadius]     = React.useState(1000);
+  const [error, setError]       = React.useState(null);
   const loaded = React.useRef(false);
 
-  React.useEffect(() => {
-    if(!parcel?.lat || !parcel?.lng) return;
-    if(loaded.current) return;
-    loaded.current = true;
-    fetchAll();
-  }, [parcel?.id]);
-
-  async function fetchAll() {
-    setLoading(true);
-    try {
-      const [tRes, lRes] = await Promise.allSettled([
-        fetch(apiUrl+'/api/spatial/terrain',{
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({lat:parcel.lat, lng:parcel.lng}),
-          signal:AbortSignal.timeout(20000),
-        }).then(r=>r.json()),
-        fetch(apiUrl+'/api/spatial/landuse',{
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({lat:parcel.lat, lng:parcel.lng, radius}),
-          signal:AbortSignal.timeout(25000),
-        }).then(r=>r.json()),
-      ]);
-      if(tRes.status==='fulfilled') setTerrain(tRes.value?.result);
-      if(lRes.status==='fulfilled') setLanduse(lRes.value?.result);
-    } catch(e) {}
-    setLoading(false);
+  // Open-Elevation: 9 noktalı grid, Horn algoritması
+  async function fetchTerrain(lat, lng) {
+    const d = 0.001; // ~111m grid adımı
+    const pts = [];
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++)
+        pts.push({latitude: lat + dy*d, longitude: lng + dx*d});
+    const r = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({locations: pts}),
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await r.json();
+    const elev = data.results.map(e => e.elevation);
+    // 3x3 grid — Horn algoritması (satır sırası: sol-üst → sağ-alt)
+    // [0,1,2 / 3,4,5 / 6,7,8] → [nw,n,ne / w,c,e / sw,s,se]
+    const [nw,n,ne,w,c,e,sw,s,se] = elev;
+    const cellSize = d * 111320; // metre
+    const dzdx = ((ne + 2*e + se) - (nw + 2*w + sw)) / (8 * cellSize);
+    const dzdy = ((nw + 2*n + ne) - (sw + 2*s + se)) / (8 * cellSize);
+    const slope_rad  = Math.atan(Math.sqrt(dzdx*dzdx + dzdy*dzdy));
+    const slope_deg  = +(slope_rad * 180 / Math.PI).toFixed(1);
+    const slope_pct  = +(Math.tan(slope_rad) * 100).toFixed(1);
+    const aspect_rad = Math.atan2(-dzdy, dzdx);
+    const aspect_deg = (aspect_rad * 180 / Math.PI + 360) % 360;
+    const baki_dirs  = ['Kuzey','KD','Doğu','GD','Güney','GB','Batı','KB','Kuzey'];
+    const baki       = baki_dirs[Math.round(aspect_deg / 45)];
+    const uygunluk   = slope_deg < 5 ? 'Çok Uygun' : slope_deg < 15 ? 'Uygun' : slope_deg < 30 ? 'Dikkatli' : 'Riskli';
+    const uygunlukRenk = slope_deg<5?'#16a34a':slope_deg<15?'#2563eb':slope_deg<30?'#f59e0b':'#ef4444';
+    const risk_skor  = Math.min(100, Math.round(slope_deg * 2.5 + (c < 0 ? 20 : c < 10 ? 10 : 0)));
+    return {
+      rakım: Math.round(c), eğim_derece: slope_deg, eğim_yüzde: slope_pct,
+      bakı: baki, uygunluk, uygunlukRenk, risk_skor,
+      grid_min: Math.min(...elev), grid_max: Math.max(...elev),
+    };
   }
 
-  async function refetchLanduse() {
-    setLoading(true);
-    try {
-      const r = await fetch(apiUrl+'/api/spatial/landuse',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({lat:parcel.lat, lng:parcel.lng, radius}),
-        signal:AbortSignal.timeout(25000),
+  // OSM Overpass: arazi kullanım dağılımı
+  async function fetchLanduse(lat, lng, r) {
+    const mirrors = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+    ];
+    const q = `[out:json][timeout:20];(
+      way["landuse"](around:${r},${lat},${lng});
+      relation["landuse"](around:${r},${lat},${lng});
+    );out tags;`;
+
+    let data = null;
+    for (const mirror of mirrors) {
+      try {
+        const res = await fetch(mirror, {
+          method:'POST', body:q, signal:AbortSignal.timeout(15000)
+        });
+        data = await res.json();
+        if (data.elements?.length > 0) break;
+      } catch(e) { continue; }
+    }
+    if (!data?.elements?.length) return null;
+
+    const KAT_MAP = {
+      residential:'Konut', apartments:'Konut', housing:'Konut',
+      commercial:'Ticaret', retail:'Ticaret', office:'Ticaret',
+      industrial:'Sanayi', warehouse:'Sanayi', port:'Sanayi',
+      farmland:'Tarım', farm:'Tarım', orchard:'Tarım', vineyard:'Tarım',
+      forest:'Yeşil', park:'Yeşil', grass:'Yeşil', meadow:'Yeşil', recreation_ground:'Yeşil',
+      military:'Askeri', cemetery:'Mezarlık', education:'Eğitim',
+      religious:'Dini', hospital:'Sağlık',
+    };
+    const METRIK_MAP = {
+      'Konut':{demografi:0.3,gelisme:0.2},'Ticaret':{ticari:0.35,demografi:0.15},
+      'Sanayi':{altyapi:0.3,ulasim:0.2},'Tarım':{risk:0.1},'Yeşil':{demografi:0.1,risk:-0.05},
+    };
+    const COL = {Konut:'#2563eb',Ticaret:'#16a34a',Sanayi:'#f59e0b',Tarım:'#84cc16',Yeşil:'#22c55e',Askeri:'#ef4444',Diğer:'#94a3b8',Mezarlık:'#6b7280',Eğitim:'#8b5cf6',Dini:'#ec4899',Sağlık:'#06b6d4'};
+
+    const sayım = {};
+    data.elements.forEach(el => {
+      const lu = el.tags?.landuse || el.tags?.natural || '';
+      const kat = KAT_MAP[lu] || 'Diğer';
+      sayım[kat] = (sayım[kat]||0) + 1;
+    });
+    const total = Object.values(sayım).reduce((a,b)=>a+b,0);
+    const dagilim = Object.entries(sayım)
+      .map(([k,v]) => ({kat:k, sayi:v, yuzde:Math.round(v/total*100), renk:COL[k]||'#94a3b8', metrik:METRIK_MAP[k]||{}}))
+      .sort((a,b) => b.sayi-a.sayi);
+
+    // ISDBM metrik katkısı
+    const metrik_katki = {};
+    dagilim.forEach(d => {
+      Object.entries(d.metrik).forEach(([m,w]) => {
+        metrik_katki[m] = (metrik_katki[m]||0) + w * (d.yuzde/100);
       });
-      const d = await r.json();
-      setLanduse(d?.result);
-    } catch(e) {}
-    setLoading(false);
+    });
+
+    return {dagilim, total, metrik_katki, basari:true};
   }
 
-  if(!parcel?.lat) return null;
+  async function load(r) {
+    if (!parcel?.lat || !parcel?.lng) return;
+    setLoading(true); setError(null);
+    try {
+      const [t, l] = await Promise.all([
+        fetchTerrain(parcel.lat, parcel.lng),
+        fetchLanduse(parcel.lat, parcel.lng, r),
+      ]);
+      setTerrain(t); setLanduse(l);
+    } catch(e) {
+      setError('Veri alınamadı: ' + e.message);
+    }
+    setLoading(false);
+    loaded.current = true;
+  }
+
+  React.useEffect(() => { load(radius); }, []);
+
+  const METRİK_AD = {ulasim:'Ulaşım',demografi:'Demografi',ticari:'Ticari',altyapi:'Altyapı',risk:'Risk',gelisme:'Gelişme'};
 
   return (
-    <div className="card" style={{marginBottom:16}}>
-      <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>🌍 Arazi & Çevre Analizi</div>
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontWeight:700,fontSize:14}}>🏔️ Arazi Analizi</div>
+        {loading && <span style={{fontSize:11,color:'#2563eb'}}>⏳ Yükleniyor...</span>}
+      </div>
 
-      {loading && <div style={{fontSize:12,color:'#64748b',padding:'8px 0'}}>⏳ Yükleniyor...</div>}
+      {error && <div style={{fontSize:11,color:'#ef4444',marginBottom:8}}>{error}</div>}
 
       {/* Terrain */}
-      {terrain?.basari && (
-        <div style={{background:'#f0fdf4',borderRadius:10,padding:14,marginBottom:12,border:'1px solid #86efac'}}>
-          <div style={{fontWeight:700,fontSize:13,color:'#166534',marginBottom:10}}>⛰️ Arazi Analizi (Horn Algoritması)</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:8,marginBottom:10}}>
-            {[
-              ['Yükseklik', terrain.merkez_yukseklik+'m', '#166534'],
-              ['Eğim', terrain.egim_derece+'°', terrain.egim_derece>10?'#ef4444':terrain.egim_derece>5?'#f59e0b':'#16a34a'],
-              ['Eğim %', '%'+terrain.egim_yuzde, '#374151'],
-              ['Bakı', terrain.baki_yon, '#374151'],
-            ].map(([l,v,c])=>(
-              <div key={l} style={{background:'#fff',borderRadius:7,padding:'8px 10px',border:'1px solid #dcfce7'}}>
-                <div style={{fontSize:10,color:'#64748b'}}>{l}</div>
-                <div style={{fontSize:14,fontWeight:800,color:c}}>{v}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{fontSize:12,fontWeight:600,color:'#166534',marginBottom:4}}>{terrain.egim_sinif}</div>
-          <div style={{fontSize:11,color:'#374151',marginBottom:6}}>{terrain.insaat_uygunlugu}</div>
-          <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>{terrain.yorum}</div>
-          {terrain.risk_skoru > 0 && (
-            <div style={{marginTop:8,background:'#fee2e2',borderRadius:6,padding:'6px 10px',fontSize:11,color:'#b91c1c'}}>
-              ⚠️ Arazi Risk Skoru: {terrain.risk_skoru}/100
+      {terrain && <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:600,color:'#64748b',marginBottom:6}}>📐 EĞİM ANALİZİ (Horn Algoritması)</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
+          {[
+            ['Rakım',terrain.rakım+' m','#0ea5e9'],
+            ['Eğim',terrain.eğim_derece+'° ('+terrain.eğim_yüzde+'%)','#f59e0b'],
+            ['Bakı',terrain.bakı,'#8b5cf6'],
+            ['Risk Skoru',terrain.risk_skor+'/100','#ef4444'],
+          ].map(([l,v,c])=>(
+            <div key={l} style={{background:'#f8fafc',borderRadius:6,padding:'6px 8px'}}>
+              <div style={{fontSize:9,color:'#94a3b8'}}>{l}</div>
+              <div style={{fontSize:13,fontWeight:700,color:c}}>{v}</div>
             </div>
-          )}
+          ))}
         </div>
-      )}
-      {terrain?.basari===false && (
-        <div style={{fontSize:11,color:'#94a3b8',marginBottom:8}}>⛰️ Yükseklik verisi alınamadı</div>
-      )}
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:terrain.uygunlukRenk+'22',border:'1px solid '+terrain.uygunlukRenk+'44',borderRadius:6}}>
+          <span style={{fontSize:16}}>{terrain.uygunluk==='Çok Uygun'?'✅':terrain.uygunluk==='Uygun'?'🟢':terrain.uygunluk==='Dikkatli'?'⚠️':'🔴'}</span>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,color:terrain.uygunlukRenk}}>{terrain.uygunluk}</div>
+            <div style={{fontSize:10,color:'#64748b'}}>Eğim: {terrain.eğim_derece}° · Min/Max: {terrain.grid_min}/{terrain.grid_max}m</div>
+          </div>
+        </div>
+      </div>}
 
       {/* Landuse */}
-      {landuse?.basari && (
-        <div style={{background:'#f8fafc',borderRadius:10,padding:14,border:'1px solid #e2e8f0'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
-            <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>🗺️ Arazi Kullanımı ({radius}m yarıçap)</div>
-            <div style={{display:'flex',gap:6,alignItems:'center'}}>
-              <select value={radius} onChange={e=>{setRadius(Number(e.target.value));}}
-                style={{fontSize:11,padding:'4px 8px',border:'1px solid #e2e8f0',borderRadius:6}}>
-                {[500,1000,1500,2000,3000].map(r=><option key={r} value={r}>{r}m</option>)}
-              </select>
-              <button onClick={refetchLanduse} style={{fontSize:11,padding:'4px 10px',background:'#2563eb',color:'#fff',border:'none',borderRadius:6,cursor:'pointer'}}>
-                Güncelle
-              </button>
+      {landuse && <div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+          <div style={{fontSize:11,fontWeight:600,color:'#64748b'}}>🗺️ ARAZİ KULLANIMI</div>
+          <div style={{display:'flex',gap:4,alignItems:'center'}}>
+            <select value={radius} onChange={e=>{setRadius(parseInt(e.target.value));}}
+              style={{fontSize:10,padding:'2px 4px',borderRadius:4,border:'1px solid #e2e8f0'}}>
+              {[500,750,1000,1500,2000,3000].map(v=><option key={v} value={v}>{v}m</option>)}
+            </select>
+            <button onClick={()=>load(radius)}
+              style={{fontSize:10,padding:'2px 8px',borderRadius:4,background:'#2563eb',color:'#fff',border:'none',cursor:'pointer'}}>
+              🔄
+            </button>
+          </div>
+        </div>
+        <div style={{fontSize:10,color:'#94a3b8',marginBottom:6}}>{landuse.total} alan · {radius}m yarıçap</div>
+        {landuse.dagilim.slice(0,6).map(d=>(
+          <div key={d.kat} style={{marginBottom:5}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+              <span style={{fontSize:10,fontWeight:500}}>{d.kat}</span>
+              <span style={{fontSize:10,color:'#64748b'}}>{d.yuzde}%</span>
+            </div>
+            <div style={{height:6,background:'#f1f5f9',borderRadius:3,overflow:'hidden'}}>
+              <div style={{height:'100%',width:d.yuzde+'%',background:d.renk,borderRadius:3}}/>
             </div>
           </div>
-          <div style={{fontSize:12,color:'#64748b',marginBottom:10}}>
-            Baskın: <b style={{color:'#0f172a'}}>{landuse.baskin_tr}</b>
-          </div>
-
-          {/* Dağılım bar'ları */}
-          <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
-            {Object.entries(landuse.dagilim_tr||{}).slice(0,6).map(([k,v])=>(
-              <div key={k}>
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
-                  <span style={{color:'#374151'}}>{k}</span>
-                  <span style={{fontWeight:600}}>%{v}</span>
-                </div>
-                <div style={{background:'#e2e8f0',borderRadius:4,height:6}}>
-                  <div style={{background:'#2563eb',borderRadius:4,height:6,width:`${Math.min(v,100)}%`,transition:'width .3s'}}/>
-                </div>
+        ))}
+        {Object.keys(landuse.metrik_katki).length>0 && (
+          <div style={{marginTop:8,padding:'6px 8px',background:'#f0f9ff',borderRadius:6,border:'1px solid #bae6fd'}}>
+            <div style={{fontSize:10,fontWeight:600,color:'#0369a1',marginBottom:4}}>📊 ISDBM Metrik Katkısı</div>
+            {Object.entries(landuse.metrik_katki).map(([m,w])=>(
+              <div key={m} style={{display:'flex',justifyContent:'space-between',fontSize:10,marginBottom:2}}>
+                <span style={{color:'#475569'}}>{METRİK_AD[m]||m}</span>
+                <span style={{color:w>0?'#16a34a':'#ef4444',fontWeight:600}}>{w>0?'+':''}{(w*100).toFixed(0)}%</span>
               </div>
             ))}
           </div>
+        )}
+      </div>}
 
-          {/* Metrik katkısı */}
-          {landuse.metrik_katki && Object.values(landuse.metrik_katki).some(v=>v!==0) && (
-            <div style={{background:'#eff6ff',borderRadius:8,padding:'8px 12px',marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:700,color:'#1d4ed8',marginBottom:6}}>📊 ISDBM Metrik Katkısı</div>
-              <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                {Object.entries(landuse.metrik_katki).filter(([,v])=>v!==0).map(([k,v])=>(
-                  <span key={k} style={{fontSize:10,padding:'2px 8px',borderRadius:12,
-                    background:v>0?'#dcfce7':'#fee2e2',
-                    color:v>0?'#166534':'#b91c1c',fontWeight:600}}>
-                    {k}: {v>0?'+':''}{v}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div style={{fontSize:11,color:'#64748b',fontStyle:'italic'}}>{landuse.yorum}</div>
+      {!terrain && !landuse && !loading && (
+        <div style={{fontSize:11,color:'#94a3b8',textAlign:'center',padding:'10px 0'}}>
+          <button onClick={()=>load(radius)} style={{fontSize:11,padding:'6px 14px',borderRadius:6,background:'#2563eb',color:'#fff',border:'none',cursor:'pointer'}}>
+            🔄 Arazi Analizi Yükle
+          </button>
         </div>
-      )}
-      {landuse?.basari===false && (
-        <div style={{fontSize:11,color:'#94a3b8'}}>🗺️ Arazi kullanım verisi bulunamadı</div>
       )}
     </div>
   );
 };
-
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 
