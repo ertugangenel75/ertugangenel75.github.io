@@ -3825,80 +3825,164 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 
 <script>
-// ── ISDBM View3D — MapLibre GL + MapTiler ────────────────────────────────
-var MAPTILER_KEY = 'gEMko0kg0I9UOViOUMZQ';
+// ── ISDBM View3D — MapLibre GL + MapTiler + BIM Loader ──────────────────
+var MAPTILER_KEY='gEMko0kg0I9UOViOUMZQ';
+var IMAR_COL={'Konut Bölgesi':'#2563eb','Ticaret Bölgesi':'#16a34a','Karma Kullanım':'#8b5cf6','Turizm Bölgesi':'#ec4899','Lojistik Bölgesi':'#f59e0b','Sanayi Bölgesi':'#f97316','Belirsiz':'#94a3b8'};
+var IMAR_YUK={'Konut Bölgesi':35,'Ticaret Bölgesi':55,'Karma Kullanım':40,'Turizm Bölgesi':45,'Lojistik Bölgesi':15,'Sanayi Bölgesi':18,'Belirsiz':20};
+var POI_COL_MAP={'Ulaşım':'#3b82f6','Sağlık':'#ef4444','Eğitim':'#16a34a','Ticaret':'#f59e0b','Konaklama':'#8b5cf6','Finans':'#06b6d4','Resmi Kurum':'#6366f1','Yeşil Alan':'#22c55e','Diğer':'#fbbf24'};
+var POI_KAT={pharmacy:'Sağlık',hospital:'Sağlık',clinic:'Sağlık',doctors:'Sağlık',bank:'Finans',atm:'Finans',school:'Eğitim',university:'Eğitim',bus_station:'Ulaşım',station:'Ulaşım',tram_stop:'Ulaşım',supermarket:'Ticaret',mall:'Ticaret',restaurant:'Ticaret',cafe:'Ticaret',hotel:'Konaklama',motel:'Konaklama',townhall:'Resmi Kurum',courthouse:'Resmi Kurum',police:'Resmi Kurum',fire_station:'Resmi Kurum',post_office:'Resmi Kurum',park:'Yeşil Alan',sports_centre:'Yeşil Alan'};
 
-var IMAR_COL = {
-  'Konut Bölgesi':   '#2563eb',
-  'Ticaret Bölgesi': '#16a34a',
-  'Karma Kullanım':  '#8b5cf6',
-  'Turizm Bölgesi':  '#ec4899',
-  'Lojistik Bölgesi':'#f59e0b',
-  'Sanayi Bölgesi':  '#f97316',
-  'Belirsiz':        '#94a3b8',
-};
-var IMAR_YUK = {
-  'Konut Bölgesi':35,'Ticaret Bölgesi':55,'Karma Kullanım':40,
-  'Turizm Bölgesi':45,'Lojistik Bölgesi':15,'Sanayi Bölgesi':18,'Belirsiz':20
-};
-var POI_COL_MAP = {
-  'Ulaşım':'#3b82f6','Sağlık':'#ef4444','Eğitim':'#16a34a',
-  'Ticaret':'#f59e0b','Konaklama':'#8b5cf6','Finans':'#06b6d4',
-  'Resmi Kurum':'#6366f1','Yeşil Alan':'#22c55e','Diğer':'#fbbf24'
-};
-var POI_KAT = {
-  pharmacy:'Sağlık',hospital:'Sağlık',clinic:'Sağlık',doctors:'Sağlık',
-  bank:'Finans',atm:'Finans',school:'Eğitim',university:'Eğitim',
-  bus_station:'Ulaşım',station:'Ulaşım',tram_stop:'Ulaşım',
-  supermarket:'Ticaret',mall:'Ticaret',restaurant:'Ticaret',cafe:'Ticaret',
-  hotel:'Konaklama',motel:'Konaklama',
-  townhall:'Resmi Kurum',courthouse:'Resmi Kurum',police:'Resmi Kurum',
-  fire_station:'Resmi Kurum',post_office:'Resmi Kurum',
-  park:'Yeşil Alan',sports_centre:'Yeşil Alan'
-};
-
+function loadJS(src){
+  return new Promise(function(res,rej){
+    if(document.querySelector('script[src="'+src+'"]'))return res();
+    var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);
+  });
+}
 function loadMapLibre(){
   return new Promise(function(res,rej){
     if(window.maplibregl){res();return;}
-    var css=document.createElement('link');
-    css.rel='stylesheet';
-    css.href='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css';
-    document.head.appendChild(css);
-    var s=document.createElement('script');
-    s.src='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js';
-    s.onload=res;s.onerror=rej;
-    document.head.appendChild(s);
+    var css=document.createElement('link');css.rel='stylesheet';css.href='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css';document.head.appendChild(css);
+    var s=document.createElement('script');s.src='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);
   });
 }
-
 function v3dCtr(p){
   if(p.lng&&p.lat&&Math.abs(p.lat)>0.01)return[+p.lng,+p.lat];
   var a=p.coords||p.coordinates||[];
   if(a.length){var sl=0,sn=0;a.forEach(function(c){sl+=parseFloat(c[0]);sn+=parseFloat(c[1]);});return[sn/a.length,sl/a.length];}
   return null;
 }
-
 function fetchPOI3D(lat,lng){
   var mirrors=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
-  var q='[out:json][timeout:20];(node["amenity"~"pharmacy|hospital|bank|atm|school|bus_station|police|fire_station|post_office|restaurant|cafe|supermarket"](around:800,'+lat+','+lng+');node["shop"~"supermarket|mall"](around:800,'+lat+','+lng+');node["tourism"~"hotel"](around:800,'+lat+','+lng+'););out body;';
-  function parse(d){
-    var seen=new Set(),res=[];
-    (d.elements||[]).forEach(function(el){
-      if(!el.lat||!el.lon)return;
-      var t=el.tags||{},rt=t.amenity||t.shop||t.tourism||'other',name=t.name||rt;
-      var key=name+Math.round(el.lat*1000);if(seen.has(key))return;seen.add(key);
-      res.push({name:name,type:rt,kat:POI_KAT[rt]||'Diğer',lat:el.lat,lng:el.lon});
-    });
-    return res.slice(0,60);
-  }
-  function tryM(i){
-    if(i>=mirrors.length)return Promise.resolve([]);
-    return fetch(mirrors[i],{method:'POST',body:q,signal:AbortSignal.timeout(15000)})
-      .then(function(r){return r.json();})
-      .then(function(d){var p=parse(d);return p.length>0?p:tryM(i+1);})
-      .catch(function(){return tryM(i+1);});
-  }
+  var q='[out:json][timeout:20];(node["amenity"~"pharmacy|hospital|bank|atm|school|bus_station|police|fire_station|restaurant|cafe|supermarket"](around:800,'+lat+','+lng+');node["tourism"~"hotel"](around:800,'+lat+','+lng+'););out body;';
+  function parse(d){var seen=new Set(),res=[];(d.elements||[]).forEach(function(el){if(!el.lat||!el.lon)return;var t=el.tags||{},rt=t.amenity||t.tourism||'other',name=t.name||rt;var key=name+Math.round(el.lat*1000);if(seen.has(key))return;seen.add(key);res.push({name:name,type:rt,kat:POI_KAT[rt]||'Diğer',lat:el.lat,lng:el.lon});});return res.slice(0,60);}
+  function tryM(i){if(i>=mirrors.length)return Promise.resolve([]);return fetch(mirrors[i],{method:'POST',body:q,signal:AbortSignal.timeout(15000)}).then(function(r){return r.json();}).then(function(d){var p=parse(d);return p.length>0?p:tryM(i+1);}).catch(function(){return tryM(i+1);});}
   return tryM(0);
+}
+
+// ── BIM Loader — View3D içinde ──────────────────────────────────────────
+function bimLoadModel(files, onModel, onStatus){
+  var glbFile=null,objFile=null,mtlFile=null,fbxFile=null,ifcFile=null;
+  Array.from(files).forEach(function(f){
+    var ext=f.name.split('.').pop().toLowerCase();
+    if(ext==='glb'||ext==='gltf')glbFile=f;
+    else if(ext==='obj')objFile=f;
+    else if(ext==='mtl')mtlFile=f;
+    else if(ext==='fbx')fbxFile=f;
+    else if(ext==='ifc')ifcFile=f;
+  });
+
+  if(glbFile){
+    onStatus('GLB yükleniyor...');
+    loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js').then(function(){
+      var url=URL.createObjectURL(glbFile);
+      new window.THREE.GLTFLoader().load(url,function(g){URL.revokeObjectURL(url);onModel(g.scene,'GLB',glbFile.name);onStatus('');},null,function(e){onStatus('GLB hata:'+e.message);});
+    });
+  } else if(objFile){
+    onStatus('OBJ yükleniyor...');
+    loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js').then(function(){
+      return mtlFile?loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js'):Promise.resolve();
+    }).then(function(){
+      if(mtlFile&&window.THREE.MTLLoader){
+        onStatus('MTL yükleniyor...');
+        var mtlUrl=URL.createObjectURL(mtlFile);
+        var mtlLoader=new window.THREE.MTLLoader();
+        mtlLoader.load(mtlUrl,function(mats){
+          URL.revokeObjectURL(mtlUrl);
+          mats.preload();
+          var objUrl=URL.createObjectURL(objFile);
+          var loader=new window.THREE.OBJLoader();
+          loader.setMaterials(mats);
+          loader.load(objUrl,function(obj){URL.revokeObjectURL(objUrl);onModel(obj,'OBJ+MTL',objFile.name);onStatus('');},null,function(e){onStatus('OBJ hata:'+e.message);});
+        });
+      } else {
+        var objUrl=URL.createObjectURL(objFile);
+        new window.THREE.OBJLoader().load(objUrl,function(obj){
+          obj.traverse(function(c){if(c.isMesh)c.material=new window.THREE.MeshLambertMaterial({color:0xd4b896,side:window.THREE.DoubleSide});});
+          URL.revokeObjectURL(objUrl);onModel(obj,'OBJ',objFile.name);onStatus('');
+        },null,function(e){onStatus('OBJ hata:'+e.message);});
+      }
+    });
+  } else if(fbxFile){
+    onStatus('FBX yükleniyor...');
+    loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js').then(function(){
+      return loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js');
+    }).then(function(){
+      fbxFile.arrayBuffer().then(function(buf){
+        try{var fbx=new window.THREE.FBXLoader().parse(buf);onModel(fbx,'FBX',fbxFile.name);onStatus('');}
+        catch(e){onStatus('FBX hata:'+e.message);}
+      });
+    });
+  } else if(ifcFile){
+    onStatus('IFC yükleniyor...(web-ifc)');
+    loadJS('https://cdn.jsdelivr.net/npm/web-ifc@0.0.44/web-ifc-api.js').then(function(){
+      return loadJS('https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.126/IFCLoader.js');
+    }).then(function(){
+      var url=URL.createObjectURL(ifcFile);
+      var ldr=new window.IFCLoader();
+      ldr.ifcManager.setWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.44/').then(function(){
+        ldr.load(url,function(m){URL.revokeObjectURL(url);onModel(m,'IFC',ifcFile.name);onStatus('');},null,function(e){onStatus('IFC hata:'+e.message);});
+      });
+    });
+  } else {
+    onStatus('Desteklenmeyen format. GLB, OBJ(+MTL), FBX, IFC seçin.');
+  }
+}
+
+// MapLibre CustomLayer — paylaşılan GL context ile Three.js
+function createBIMLayer(map, THREE, model, lngLat){
+  if(map.getLayer('bim-layer'))map.removeLayer('bim-layer');
+
+  // Model normalize — merkeze oturt, boyutla
+  var box=new THREE.Box3().setFromObject(model);
+  var size=box.getSize(new THREE.Vector3());
+  var center=box.getCenter(new THREE.Vector3());
+  model.position.sub(center);
+  model.position.y+=size.y/2; // zemine oturt
+  var maxDim=Math.max(size.x,size.y,size.z);
+  // Hedef: 50m boyutunda görünsün
+  var targetSize=50;
+  if(maxDim>0)model.scale.multiplyScalar(targetSize/maxDim);
+
+  var scene=new THREE.Scene();
+  scene.add(new THREE.AmbientLight(0xffffff,1.0));
+  var sun=new THREE.DirectionalLight(0xfff5e0,0.8);sun.position.set(1,2,1).normalize();scene.add(sun);
+  scene.add(model);
+
+  var mc=window.maplibregl.MercatorCoordinate.fromLngLat(lngLat,0);
+  var mScale=mc.meterInMercatorCoordinateUnits();
+
+  var camera=new THREE.Camera();
+  var renderer=null;
+
+  map.addLayer({
+    id:'bim-layer',
+    type:'custom',
+    renderingMode:'3d',
+    onAdd:function(map,gl){
+      // MapLibre'nin canvas + context'ini paylaş
+      renderer=new THREE.WebGLRenderer({
+        canvas:map.getCanvas(),
+        context:gl,
+        antialias:true
+      });
+      renderer.autoClear=false;
+    },
+    render:function(gl,matrix){
+      // Koordinat dönüşümü — rotasyon + ölçek + konum
+      var rotX=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1,0,0),Math.PI/2);
+      var m=new THREE.Matrix4()
+        .makeTranslation(mc.x,mc.y,mc.z)
+        .scale(new THREE.Vector3(mScale,-mScale,mScale))
+        .multiply(rotX);
+      camera.projectionMatrix=new THREE.Matrix4().fromArray(matrix).multiply(m);
+      renderer.resetState();
+      renderer.render(scene,camera);
+      map.triggerRepaint();
+    },
+    onRemove:function(){
+      if(renderer)renderer.dispose();
+    }
+  });
 }
 
 var View3D=function(props){
@@ -3906,320 +3990,164 @@ var View3D=function(props){
   var onClose=props.onClose;
   var mapContRef=React.useRef(null);
   var mapRef=React.useRef(null);
+  var fileInputRef=React.useRef(null);
 
   var s1=React.useState('MapLibre yükleniyor...'),status=s1[0],setStatus=s1[1];
   var s2=React.useState(0),poiN=s2[0],setPoiN=s2[1];
   var s3=React.useState(false),panelOpen=s3[0],setPanelOpen=s3[1];
   var s4=React.useState(45),pitch=s4[0],setPitch=s4[1];
   var s5=React.useState(100),heightPct=s5[0],setHeightPct=s5[1];
-  var s6=React.useState(true),showBldgs=s6[0],setShowBldgs=s6[1];
-  var s6b=React.useState(true),showTerrain=s6b[0],setShowTerrain=s6b[1];
-  var s7=React.useState(true),rotating=s7[0],setRotating=s7[1];
+  var s6=React.useState(true),rotating=s6[0],setRotating=s6[1];
+  var s7=React.useState(null),bimInfo=s7[0],setBimInfo=s7[1];
+  var s8=React.useState(false),showTerrain=s8[0],setShowTerrain=s8[1];
   var rotRef=React.useRef(null);
+  var terrainRef=React.useRef(false);
 
-  // Pitch değişince haritayı güncelle
   React.useEffect(function(){
     if(!mapRef.current)return;
     mapRef.current.setPitch(pitch);
   },[pitch]);
 
-  // Yükseklik değişince parsel layer'ını güncelle
   React.useEffect(function(){
     if(!mapRef.current)return;
-    var map=mapRef.current;
     parcels.forEach(function(p,i){
       var lid='parsel-'+i;
-      if(map.getLayer(lid)){
-        var baseH=IMAR_YUK[p.planDurumu||'Belirsiz']||20;
-        map.setPaintProperty(lid,'fill-extrusion-height',Math.max(baseH*(heightPct/100),1));
-      }
+      try{if(mapRef.current.getLayer(lid)){var bH=IMAR_YUK[p.planDurumu||'Belirsiz']||20;mapRef.current.setPaintProperty(lid,'fill-extrusion-height',Math.max(bH*(heightPct/100),1));}}catch(e){}
     });
   },[heightPct]);
 
-  // Otomatik döndürme
   React.useEffect(function(){
     if(!mapRef.current)return;
     if(rotating){
-      var bearing=mapRef.current.getBearing();
-      rotRef.current=setInterval(function(){
-        bearing+=0.3;
-        if(mapRef.current)mapRef.current.setBearing(bearing);
-      },50);
-    }else{
-      if(rotRef.current)clearInterval(rotRef.current);
-    }
+      var b=mapRef.current.getBearing();
+      rotRef.current=setInterval(function(){b+=0.3;if(mapRef.current)mapRef.current.setBearing(b);},50);
+    }else{if(rotRef.current)clearInterval(rotRef.current);}
     return function(){if(rotRef.current)clearInterval(rotRef.current);};
   },[rotating]);
+
+  // BIM dosya seçildi
+  function handleBIMFiles(e){
+    var files=e.target.files;
+    if(!files||!files.length)return;
+    loadJS('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js').then(function(){
+      var THREE=window.THREE;
+      bimLoadModel(files,function(model,tip,ad){
+        var ctr=null;for(var i=0;i<parcels.length;i++){var c=v3dCtr(parcels[i]);if(c){ctr=c;break;}}
+        if(!ctr){setStatus('Koordinat bulunamadı');return;}
+        if(mapRef.current){
+          createBIMLayer(mapRef.current,THREE,model,{lng:ctr[0],lat:ctr[1]});
+          setBimInfo({tip:tip,ad:ad});
+          setStatus('');
+        }
+      },setStatus);
+    });
+    // Input'u sıfırla — aynı dosya tekrar seçilebilsin
+    e.target.value='';
+  }
 
   React.useEffect(function(){
     if(!mapContRef.current)return;
     var map;
-
     loadMapLibre().then(function(){
-      var ctr=null;
-      for(var i=0;i<parcels.length;i++){var c=v3dCtr(parcels[i]);if(c){ctr=c;break;}}
+      var ctr=null;for(var i=0;i<parcels.length;i++){var c=v3dCtr(parcels[i]);if(c){ctr=c;break;}}
       if(!ctr)ctr=[29.0,41.0];
-
       setStatus('Harita yükleniyor...');
-
       map=new window.maplibregl.Map({
-        container: mapContRef.current,
-        style: 'https://api.maptiler.com/maps/satellite/style.json?key='+MAPTILER_KEY,
-        center: ctr,
-        zoom: 16,
-        pitch: 45,
-        bearing: -20,
-        antialias: true,
+        container:mapContRef.current,
+        style:'https://api.maptiler.com/maps/satellite/style.json?key='+MAPTILER_KEY,
+        center:ctr,zoom:16,pitch:45,bearing:-20,antialias:true,
       });
       mapRef.current=map;
 
-      map.on('load',function(){console.log('MAP LOAD fired');
+      map.on('load',function(){
         setStatus('');
+        // Terrain
+        map.addSource('terrain-src',{type:'raster-dem',url:'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key='+MAPTILER_KEY,tileSize:256});
 
-        // Terrain — gerçek arazi yüksekliği
-        map.addSource('terrain-src',{
-          type:'raster-dem',
-          url:'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key='+MAPTILER_KEY,
-          tileSize:256,
-        });
-        map.setTerrain({source:'terrain-src',exaggeration:1.0});
-
-        // Gökyüzü (//setSky_disabled MapLibre 4+ gerektirir, atlandı)
-
-        // ── BIM CustomLayer ─────────────────────────────────────────────
-        function addBIMLayer(bimModel){
-          if(!bimModel||!window.THREE)return;
-          var THREE=window.THREE;
-          // Mevcut BIM layer'ı varsa kaldır
-          if(map.getLayer('bim-custom'))map.removeLayer('bim-custom');
-
-          var modelScene=new THREE.Scene();
-          var modelClone=bimModel.clone(true);
-          modelScene.add(modelClone);
-
-          // Merkez koordinat
-          var ctr=null;
-          for(var i=0;i<parcels.length;i++){var c=v3dCtr(parcels[i]);if(c){ctr=c;break;}}
-          if(!ctr)return;
-
-          var customLayer={
-            id:'bim-custom',
-            type:'custom',
-            renderingMode:'3d',
-            onAdd:function(map,gl){
-              this._renderer=new THREE.WebGLRenderer({
-                canvas:map.getCanvas(),
-                context:gl,
-                antialias:true,
-              });
-              this._renderer.autoClear=false;
-              this._camera=new THREE.Camera();
-              this._scene=modelScene;
-              // Işıklar
-              this._scene.add(new THREE.AmbientLight(0xffffff,0.8));
-              var sun=new THREE.DirectionalLight(0xfff5e0,1.0);
-              sun.position.set(0.5,1,0.5).normalize();
-              this._scene.add(sun);
-            },
-            render:function(gl,matrix){
-              // MapLibre mercator koordinatına çevir
-              var mapboxgl=window.maplibregl;
-              var lng=ctr[0],lat=ctr[1];
-              // Mercator koordinatları
-              var mc=mapboxgl.MercatorCoordinate.fromLngLat({lng:lng,lat:lat},0);
-              var scale=mc.meterInMercatorCoordinateUnits();
-              // Model boyutu: BIM model scale
-              var mScale=scale*1; // 1 mercator unit = 1m
-              var rotX=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1,0,0),Math.PI/2);
-              var m=new THREE.Matrix4()
-                .makeTranslation(mc.x,mc.y,mc.z)
-                .scale(new THREE.Vector3(mScale,-mScale,mScale))
-                .multiply(rotX);
-              this._camera.projectionMatrix=new THREE.Matrix4().fromArray(matrix).multiply(m);
-              this._renderer.resetState();
-              this._renderer.render(this._scene,this._camera);
-              map.triggerRepaint();
+        function addParcels(){
+          parcels.forEach(function(p,i){
+            var plan=p.planDurumu||'Belirsiz';
+            var bH=IMAR_YUK[plan]||20,col=IMAR_COL[plan]||'#94a3b8';
+            var coords=p.coords||p.coordinates||[];
+            var pc=v3dCtr(p);if(!pc)return;
+            var ring;
+            if(coords.length>=3){
+              ring=coords.map(function(c){return[parseFloat(c[1]),parseFloat(c[0])];});
+              if(ring[0][0]!==ring[ring.length-1][0]||ring[0][1]!==ring[ring.length-1][1])ring.push(ring[0]);
+            }else{
+              var alan=parseFloat(p.alan)||500;
+              var half=Math.max(Math.sqrt(alan),50)/2/111320;
+              var lngH=half/Math.cos(pc[1]*Math.PI/180);
+              ring=[[pc[0]-lngH,pc[1]-half],[pc[0]+lngH,pc[1]-half],[pc[0]+lngH,pc[1]+half],[pc[0]-lngH,pc[1]+half],[pc[0]-lngH,pc[1]-half]];
             }
-          };
-          map.addLayer(customLayer);
-          console.log('BIM CustomLayer eklendi');
-        }
-
-        // BIM model hazırsa ekle, sonra gelirse de ekle
-        if(window.ISDBM_BIM){
-          window.ISDBM_BIM.onModel(function(model){
-            if(model)addBIMLayer(model);
+            var sid='parsel-src-'+i,lid='parsel-'+i;
+            if(!map.getSource(sid))map.addSource(sid,{type:'geojson',data:{type:'Feature',geometry:{type:'Polygon',coordinates:[ring]}}});
+            if(!map.getLayer(lid))map.addLayer({id:lid,type:'fill-extrusion',source:sid,minzoom:5,paint:{'fill-extrusion-color':col,'fill-extrusion-height':bH,'fill-extrusion-base':0,'fill-extrusion-opacity':0.9,'fill-extrusion-vertical-gradient':true}});
+            // Marker
+            var el2=document.createElement('div');
+            el2.style.cssText='width:10px;height:10px;border-radius:50%;background:'+col+';border:2px solid #fff;';
+            new window.maplibregl.Marker({element:el2}).setLngLat(pc).addTo(map);
           });
         }
-
-        // OSM 3D binalar (MapTiler'dan hazır geliyor)
-        // MapTiler satellite style içinde zaten building layer var
-        // Ek olarak fill-extrusion ekleyelim
-        if(map.getLayer('building')){
-          map.setPaintProperty('building','fill-extrusion-height',['get','height']);
-          map.setPaintProperty('building','fill-extrusion-base',['get','min_height']);
-        }
-
-        // Parselleri ekle
-        parcels.forEach(function(p,i){
-          var plan=p.planDurumu||'Belirsiz';
-          var baseH=IMAR_YUK[plan]||20;
-          var col=IMAR_COL[plan]||'#94a3b8';
-          var coords=p.coords||p.coordinates||[];
-          var pc=v3dCtr(p);
-          if(!pc)return;
-
-          // Polygon koordinatları — [lng,lat] formatına çevir
-          var ring;
-          if(coords.length>=3){
-            ring=coords.map(function(c){return[parseFloat(c[1]),parseFloat(c[0])];});
-            if(ring[0][0]!==ring[ring.length-1][0]||ring[0][1]!==ring[ring.length-1][1])
-              ring.push(ring[0]);
-          }else{
-            // Koordinat yoksa alan'dan kare oluştur
-            var alan=parseFloat(p.alan)||500;
-            var half=Math.max(Math.sqrt(alan),50)/2/111320; // min 50m kenar
-            var lngHalf=half/Math.cos(pc[1]*Math.PI/180);
-            ring=[
-              [pc[0]-lngHalf,pc[1]-half],
-              [pc[0]+lngHalf,pc[1]-half],
-              [pc[0]+lngHalf,pc[1]+half],
-              [pc[0]-lngHalf,pc[1]+half],
-              [pc[0]-lngHalf,pc[1]-half],
-            ];
-          }
-
-          var sid='parsel-src-'+i;
-          var lid='parsel-'+i;
-
-          map.addSource(sid,{
-            type:'geojson',
-            data:{type:'Feature',geometry:{type:'Polygon',coordinates:[ring]}}
-          });
-          map.addLayer({
-            id:lid,
-            type:'fill-extrusion',
-            source:sid,
-            minzoom:5,
-            paint:{
-              'fill-extrusion-color':col,
-              'fill-extrusion-height':baseH,
-              'fill-extrusion-base':0,
-              'fill-extrusion-opacity':0.9,
-              'fill-extrusion-vertical-gradient':true,
-
-            }
-          });
-          console.log('Parsel layer eklendi:',lid,'height:',baseH,'coords:',ring.length);
-
-          // Parsel marker
-          var el2=document.createElement('div');
-          el2.style.cssText='width:12px;height:12px;border-radius:50%;background:'+col+';border:2px solid #fff;box-shadow:0 0 8px '+col;
-          new window.maplibregl.Marker({element:el2}).setLngLat(pc).addTo(map);
-        });
+        addParcels();
 
         // POI
         var hasPOI=parcels.some(function(p){return p.pois&&p.pois.length>0;});
         var ctrP=null;for(var i=0;i<parcels.length;i++){var c=v3dCtr(parcels[i]);if(c){ctrP=c;break;}}
-
         function addPOIMarkers(pois){
           var added=0;
           pois.forEach(function(poi){
             if(!poi.lat||!poi.lng)return;
             var col=POI_COL_MAP[poi.kat||poi.kategori]||'#fbbf24';
             var el3=document.createElement('div');
-            el3.style.cssText='width:10px;height:10px;border-radius:50%;background:'+col+';border:2px solid #fff;cursor:pointer;';
-            el3.title=poi.name||poi.type||'POI';
+            el3.style.cssText='width:8px;height:8px;border-radius:50%;background:'+col+';border:2px solid #fff;cursor:pointer;';
+            el3.title=poi.name||'';
             new window.maplibregl.Marker({element:el3}).setLngLat([poi.lng,poi.lat]).addTo(map);
             added++;
           });
           setPoiN(added);
         }
+        if(hasPOI){var allP=[];parcels.forEach(function(p){allP=allP.concat(p.pois||[]);});addPOIMarkers(allP);}
+        else if(ctrP){setStatus('POI yükleniyor...');fetchPOI3D(ctrP[1],ctrP[0]).then(function(pois){addPOIMarkers(pois);setStatus('');});}
 
-        if(hasPOI){
-          var allPois=[];parcels.forEach(function(p){allPois=allPois.concat(p.pois||[]);});
-          addPOIMarkers(allPois);
-        }else if(ctrP){
-          setStatus('POI yükleniyor...');
-          fetchPOI3D(ctrP[1],ctrP[0]).then(function(pois){
-            addPOIMarkers(pois);
-            setStatus('');
-          });
-        }
-
-        // BIM fire event
-        map.on('bim-add',function(e){
-          if(e&&e.model&&window.THREE){
-            var THREE=window.THREE;
-            var ctr2=null;
-            for(var i=0;i<parcels.length;i++){var c2=v3dCtr(parcels[i]);if(c2){ctr2=c2;break;}}
-            if(!ctr2)return;
-            if(map.getLayer('bim-custom'))map.removeLayer('bim-custom');
-            var modelScene2=new THREE.Scene();
-            modelScene2.add(new THREE.AmbientLight(0xffffff,0.8));
-            var sun2=new THREE.DirectionalLight(0xfff5e0,1.0);sun2.position.set(0.5,1,0.5).normalize();modelScene2.add(sun2);
-            var mc2=window.maplibregl.MercatorCoordinate.fromLngLat({lng:ctr2[0],lat:ctr2[1]},0);
-            var sc2=mc2.meterInMercatorCoordinateUnits();
-            var clone=e.model.clone(true);modelScene2.add(clone);
-            var cl2={id:'bim-custom',type:'custom',renderingMode:'3d',
-              onAdd:function(map,gl){
-                this._r=new THREE.WebGLRenderer({canvas:map.getCanvas(),context:gl,antialias:true});
-                this._r.autoClear=false;this._cam=new THREE.Camera();this._sc=modelScene2;
-              },
-              render:function(gl,matrix){
-                var rotX=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1,0,0),Math.PI/2);
-                var m=new THREE.Matrix4().makeTranslation(mc2.x,mc2.y,mc2.z).scale(new THREE.Vector3(sc2,-sc2,sc2)).multiply(rotX);
-                this._cam.projectionMatrix=new THREE.Matrix4().fromArray(matrix).multiply(m);
-                this._r.resetState();this._r.render(this._sc,this._cam);map.triggerRepaint();
-              }
-            };
-            map.addLayer(cl2);
-          }
-        });
-
-        // OSM 3D binalar yüklendi mi kontrol
-        map.on('idle',function(){
-          setStatus('');
+        // Style değişince layer'ları yeniden ekle
+        map.on('styledata',function(){
+          setTimeout(function(){
+            if(map.isStyleLoaded())addParcels();
+          },300);
         });
       });
-
-      map.on('error',function(e){
-        console.warn('MapLibre error:',e);
-      });
-
+      map.on('error',function(e){console.warn('MapLibre:',e);});
     }).catch(function(e){setStatus('Hata: '+e.message);});
-
     return function(){
       if(rotRef.current)clearInterval(rotRef.current);
       if(map)map.remove();
     };
   },[]);
 
-  var btnSt={background:'rgba(10,20,10,.92)',color:'#fff',border:'1px solid #1e4a1e',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'};
+  var btnSt={background:'rgba(0,0,0,.8)',color:'#fff',border:'1px solid #334155',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'};
 
   return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9999,overflow:'hidden'}},
-    // Harita container
     React.createElement('div',{ref:mapContRef,style:{width:'100%',height:'100%'}}),
 
-    // Status
     status?React.createElement('div',{style:{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,.8)',border:'1px solid #1e4a1e',borderRadius:8,padding:'6px 18px',color:'#86efac',fontSize:12,pointerEvents:'none',whiteSpace:'nowrap',zIndex:10}},status):null,
 
     // Sağ üst toolbar
     React.createElement('div',{style:{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}},
       React.createElement('button',{onClick:onClose,style:{background:'rgba(0,0,0,.85)',color:'#fff',border:'1px solid #334155',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},'← 2D Harita'),
       React.createElement('button',{onClick:function(){setRotating(function(r){return !r;});},style:{background:'rgba(0,0,0,.85)',color:rotating?'#fbbf24':'#475569',border:'1px solid #334155',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},rotating?'⏸ Durdur':'▶ Döndür'),
-      React.createElement('button',{onClick:function(){setPanelOpen(function(o){return !o;});},style:{background:panelOpen?'rgba(37,99,235,.3)':'rgba(0,0,0,.85)',color:panelOpen?'#60a5fa':'#94a3b8',border:'1px solid '+(panelOpen?'#2563eb':'#334155'),padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},"'⚙️ Düzenle'),
-      React.createElement('button',{
-        id:'bim-btn-v3d',
-        onClick:function(){
-          if(window.ISDBM_BIM&&window.ISDBM_BIM.ready&&mapRef.current){
-            mapRef.current.fire('bim-add',{model:window.ISDBM_BIM.model});
-          }else{
-            alert('Önce BIM Viewer\'dan model yükleyip "Haritaya Aktar" butonuna basın.');
-          }
-        },
-        style:{background:'rgba(124,58,237,.3)',color:'#a78bfa',border:'1px solid #7c3aed',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer',fontWeight:600}
-      },'🏗️ BIM')
+      React.createElement('button',{onClick:function(){setPanelOpen(function(o){return !o;});},style:{background:panelOpen?'rgba(37,99,235,.3)':'rgba(0,0,0,.85)',color:panelOpen?'#60a5fa':'#94a3b8',border:'1px solid '+(panelOpen?'#2563eb':'#334155'),padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},'⚙️ Düzenle'),
+      // BIM Yükle butonu
+      React.createElement('label',{style:{background:'rgba(124,58,237,.3)',color:'#a78bfa',border:'1px solid #7c3aed',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer',fontWeight:600,textAlign:'center'},title:'GLB, OBJ+MTL, FBX veya IFC yükle'},
+        '🏗️ BIM Yükle',
+        React.createElement('input',{type:'file',multiple:true,accept:'.glb,.gltf,.obj,.mtl,.fbx,.ifc',ref:fileInputRef,onChange:handleBIMFiles,style:{display:'none'}})
+      ),
+      // BIM yüklendiyse bilgi + temizle
+      bimInfo?React.createElement('div',{style:{background:'rgba(124,58,237,.2)',border:'1px solid #7c3aed',borderRadius:8,padding:'5px 10px',fontSize:10,color:'#c4b5fd'}},
+        React.createElement('div',{style:{fontWeight:600,marginBottom:2}},'✅ '+bimInfo.tip),
+        React.createElement('div',{style:{color:'#8b5cf6',marginBottom:4,wordBreak:'break-all',maxWidth:100}},bimInfo.ad.substring(0,20)),
+        React.createElement('button',{onClick:function(){if(mapRef.current&&mapRef.current.getLayer('bim-layer'))mapRef.current.removeLayer('bim-layer');setBimInfo(null);},style:{width:'100%',background:'rgba(239,68,68,.2)',color:'#fca5a5',border:'1px solid rgba(239,68,68,.3)',borderRadius:5,padding:'3px 0',fontSize:10,cursor:'pointer'}},'🗑️ Kaldır')
+      ):null
     ),
 
     // Sol üst lejant
@@ -4235,91 +4163,49 @@ var View3D=function(props){
 
     // Kontrol paneli
     panelOpen?React.createElement('div',{style:{position:'absolute',bottom:80,right:12,zIndex:10,background:'rgba(0,0,0,.92)',border:'1px solid #334155',borderRadius:12,padding:14,width:220}},
-      React.createElement('div',{style:{fontSize:11,color:'#60a5fa',fontWeight:700,marginBottom:12}},'⚙️ Kütle Düzenleme'),
+      React.createElement('div',{style:{fontSize:11,color:'#60a5fa',fontWeight:700,marginBottom:12}},'⚙️ Görünüm'),
 
-      // Yükseklik
       React.createElement('div',{style:{marginBottom:12}},
         React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4}},
-          React.createElement('span',{style:{fontSize:10,color:'#94a3b8'}},'📏 Yükseklik'),
+          React.createElement('span',{style:{fontSize:10,color:'#94a3b8'}},'📏 Kütle Yüksekliği'),
           React.createElement('span',{style:{fontSize:10,color:'#fff',fontWeight:600}},heightPct+'%')
         ),
-        React.createElement('input',{type:'range',min:10,max:500,step:5,value:heightPct,
-          onChange:function(e){setHeightPct(parseInt(e.target.value));},
-          style:{width:'100%',accentColor:'#2563eb'}})
+        React.createElement('input',{type:'range',min:10,max:500,step:5,value:heightPct,onChange:function(e){setHeightPct(parseInt(e.target.value));},style:{width:'100%',accentColor:'#2563eb'}})
       ),
 
-      // Pitch
       React.createElement('div',{style:{marginBottom:12}},
         React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4}},
           React.createElement('span',{style:{fontSize:10,color:'#94a3b8'}},'📐 Eğim Açısı'),
           React.createElement('span',{style:{fontSize:10,color:'#fff',fontWeight:600}},pitch+'°')
         ),
-        React.createElement('input',{type:'range',min:20,max:85,step:5,value:pitch,
-          onChange:function(e){setPitch(parseInt(e.target.value));},
-          style:{width:'100%',accentColor:'#2563eb'}})
+        React.createElement('input',{type:'range',min:20,max:85,step:5,value:pitch,onChange:function(e){setPitch(parseInt(e.target.value));},style:{width:'100%',accentColor:'#2563eb'}})
       ),
 
-      // Terrain toggle
-      React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
+      React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}},
         React.createElement('span',{style:{fontSize:10,color:'#94a3b8'}},'🏔️ Arazi Yüksekliği'),
-        React.createElement('button',{
-          onClick:function(){
-            setShowTerrain(function(v){
-              var newV=!v;
-              if(mapRef.current){
-                mapRef.current.setTerrain(newV?{source:'terrain-src',exaggeration:1.5}:null);
-              }
-              return newV;
-            });
-          },
-          style:{fontSize:10,padding:'3px 10px',borderRadius:6,background:showTerrain?'#16a34a':'#475569',color:'#fff',border:'none',cursor:'pointer'}
-        },showTerrain?'Açık':'Kapalı')
+        React.createElement('button',{onClick:function(){
+          setShowTerrain(function(v){
+            var nv=!v;
+            if(mapRef.current)mapRef.current.setTerrain(nv?{source:'terrain-src',exaggeration:1.0}:null);
+            return nv;
+          });
+        },style:{fontSize:10,padding:'3px 10px',borderRadius:6,background:showTerrain?'#16a34a':'#475569',color:'#fff',border:'none',cursor:'pointer'}},showTerrain?'Açık':'Kapalı')
       ),
 
-      // Görünüm stili
       React.createElement('div',{style:{marginBottom:8}},
         React.createElement('div',{style:{fontSize:10,color:'#94a3b8',marginBottom:4}},'🗺️ Harita Stili'),
         React.createElement('div',{style:{display:'flex',gap:4}},
-          ['satellite','streets','hybrid'].map(function(style){
-            return React.createElement('button',{key:style,
-              onClick:function(){
-                if(mapRef.current){
-                  var curPitch=mapRef.current.getPitch();
-                  var curBearing=mapRef.current.getBearing();
-                  var curCenter=mapRef.current.getCenter();
-                  var curZoom=mapRef.current.getZoom();
-                  mapRef.current.setStyle('https://api.maptiler.com/maps/'+style+'/style.json?key='+MAPTILER_KEY);
-                  mapRef.current.once('styledata',function(){
-                    mapRef.current.setPitch(curPitch);
-                    mapRef.current.setBearing(curBearing);
-                    // Style değişince layer'lar siliniyor — yeniden ekle
-                    parcels.forEach(function(p,i){
-                      var plan=p.planDurumu||'Belirsiz';
-                      var baseH=IMAR_YUK[plan]||20;
-                      var col=IMAR_COL[plan]||'#94a3b8';
-                      var sid='parsel-src-'+i;
-                      var lid='parsel-'+i;
-                      if(mapRef.current.getSource(sid))return; // Zaten var
-                      var coords=p.coords||p.coordinates||[];
-                      var pc=v3dCtr(p);if(!pc)return;
-                      var ring;
-                      if(coords.length>=3){
-                        ring=coords.map(function(c){return[parseFloat(c[1]),parseFloat(c[0])];});
-                        if(ring[0][0]!==ring[ring.length-1][0])ring.push(ring[0]);
-                      }else{
-                        var alan=parseFloat(p.alan)||500;
-                        var half=Math.max(Math.sqrt(alan),50)/2/111320;
-                        var lngHalf=half/Math.cos(pc[1]*Math.PI/180);
-                        ring=[[pc[0]-lngHalf,pc[1]-half],[pc[0]+lngHalf,pc[1]-half],[pc[0]+lngHalf,pc[1]+half],[pc[0]-lngHalf,pc[1]+half],[pc[0]-lngHalf,pc[1]-half]];
-                      }
-                      mapRef.current.addSource(sid,{type:'geojson',data:{type:'Feature',geometry:{type:'Polygon',coordinates:[ring]}}});
-                      mapRef.current.addLayer({id:lid,type:'fill-extrusion',source:sid,minzoom:5,paint:{'fill-extrusion-color':col,'fill-extrusion-height':baseH,'fill-extrusion-base':0,'fill-extrusion-opacity':0.9,'fill-extrusion-vertical-gradient':true}});
-                    });
-                  });
-                }
-              },
-              style:{fontSize:9,padding:'3px 6px',borderRadius:4,background:'#1e3a5f',color:'#fff',border:'none',cursor:'pointer',flex:1}
-            },style==='satellite'?'🛰️ Uydu':style==='streets'?'🗺️ OSM':'🌍 Hibrit');
+          ['satellite','streets','hybrid'].map(function(st){
+            return React.createElement('button',{key:st,onClick:function(){
+              if(mapRef.current){
+                var cp=mapRef.current.getPitch(),cb=mapRef.current.getBearing();
+                mapRef.current.setStyle('https://api.maptiler.com/maps/'+st+'/style.json?key='+MAPTILER_KEY);
+                mapRef.current.once('styledata',function(){
+                  mapRef.current.setPitch(cp);mapRef.current.setBearing(cb);
+                });
+              }
+            },style:{fontSize:9,padding:'3px 6px',borderRadius:4,background:'#1e3a5f',color:'#fff',border:'none',cursor:'pointer',flex:1}},
+            st==='satellite'?'🛰️':st==='streets'?'🗺️':'🌍');
           })
         )
       )
@@ -4332,7 +4218,7 @@ var View3D=function(props){
         React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#fff',marginBottom:1}},parcels[0].projeAdi||'İsimsiz'),
         React.createElement('div',{style:{fontSize:11,color:'#64748b',marginBottom:3}},(parcels[0].il||'?')+' / '+(parcels[0].ilce||'?'))
       ):null,
-      React.createElement('div',{style:{fontSize:10,color:'#334155'}},'🏗️ '+parcels.length+' parsel · 📍 '+poiN+' POI'),
+      React.createElement('div',{style:{fontSize:10,color:'#334155'}},'🏗️ '+parcels.length+' parsel · 📍 '+poiN+' POI'+(bimInfo?' · 🏢 BIM':'')),
       React.createElement('div',{style:{marginTop:3,fontSize:9,color:'#1e3a5f'}},'Parmak: döndür/yakınlaş')
     )
   );
