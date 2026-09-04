@@ -3649,6 +3649,7 @@ var BIMViewer=({parcel,onClose})=>{
         const maxDim=Math.max(size.x,size.y,size.z);
         if(maxDim>20)model.scale.multiplyScalar(20/maxDim);
         sceneRef.current.add(model);modelRef.current=model;
+        window.ISDBM_BIM&&window.ISDBM_BIM.setModel(model);
         setModelInfo({
           tip:'IFC',dosya:file.name,
           boyut:(file.size/1024).toFixed(0)+' KB',
@@ -3689,6 +3690,7 @@ var BIMViewer=({parcel,onClose})=>{
       const maxDim=Math.max(size.x,size.y,size.z);
       if(maxDim>20)obj.scale.multiplyScalar(20/maxDim);
       sceneRef.current.add(obj);modelRef.current=obj;
+      window.ISDBM_BIM&&window.ISDBM_BIM.setModel(obj);
       setModelInfo({tip:'OBJ',dosya:file.name,boyut:(file.size/1024).toFixed(0)+' KB',boyutlar:size.x.toFixed(1)+'x'+size.y.toFixed(1)+'x'+size.z.toFixed(1)+' m'});
       setStatus('');
     }catch(e){setStatus('OBJ hata: '+e.message);}
@@ -3715,6 +3717,7 @@ var BIMViewer=({parcel,onClose})=>{
       const maxDim=Math.max(size.x,size.y,size.z);
       if(maxDim>20)fbx.scale.multiplyScalar(20/maxDim);
       sceneRef.current.add(fbx);modelRef.current=fbx;
+      window.ISDBM_BIM&&window.ISDBM_BIM.setModel(fbx);
       setModelInfo({tip:'FBX',dosya:file.name,boyut:(file.size/1024).toFixed(0)+' KB',boyutlar:size.x.toFixed(1)+'x'+size.y.toFixed(1)+'x'+size.z.toFixed(1)+' m'});
       setStatus('');
     }catch(e){setStatus('FBX hata: '+e.message);}
@@ -3788,9 +3791,34 @@ var BIMViewer=({parcel,onClose})=>{
         {modelInfo.boyutlar&&<span>{' · '}<span style={{color:'#94a3b8'}}>{modelInfo.boyutlar}</span></span>}
       </div>
       <div style={{flex:1}}/>
+      <button onClick={()=>{
+        if(modelRef.current){
+          window.ISDBM_BIM&&window.ISDBM_BIM.setModel(modelRef.current);
+          alert('Model haritaya aktarıldı! 3D Görünüm\'ü açın ve \"BIM Yerleştir\" butonuna basın.');
+        }
+      }} style={{fontSize:11,padding:'5px 12px',borderRadius:6,background:'#2563eb',color:'#fff',border:'none',cursor:'pointer',fontWeight:600}}>
+        🗺️ Haritaya Aktar
+      </button>
       <div style={{fontSize:10,color:'#334155'}}>Sürükle: döndür · Scroll: zoom · Touch: mobil</div>
     </div>}
   </div>;
+};
+
+// ── BIM → MapLibre Köprüsü ──────────────────────────────────────────────
+// BIMViewer'dan yüklenen model buraya konur, View3D buradan alır
+window.ISDBM_BIM = {
+  model: null,      // Three.js Object3D
+  ready: false,
+  callbacks: [],
+  setModel: function(obj) {
+    this.model = obj;
+    this.ready = !!obj;
+    this.callbacks.forEach(function(cb){ try{cb(obj);}catch(e){} });
+  },
+  onModel: function(cb) {
+    this.callbacks.push(cb);
+    if(this.ready) cb(this.model);
+  },
 };
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
@@ -3958,6 +3986,72 @@ var View3D=function(props){
 
         // Gökyüzü (//setSky_disabled MapLibre 4+ gerektirir, atlandı)
 
+        // ── BIM CustomLayer ─────────────────────────────────────────────
+        function addBIMLayer(bimModel){
+          if(!bimModel||!window.THREE)return;
+          var THREE=window.THREE;
+          // Mevcut BIM layer'ı varsa kaldır
+          if(map.getLayer('bim-custom'))map.removeLayer('bim-custom');
+
+          var modelScene=new THREE.Scene();
+          var modelClone=bimModel.clone(true);
+          modelScene.add(modelClone);
+
+          // Merkez koordinat
+          var ctr=null;
+          for(var i=0;i<parcels.length;i++){var c=v3dCtr(parcels[i]);if(c){ctr=c;break;}}
+          if(!ctr)return;
+
+          var customLayer={
+            id:'bim-custom',
+            type:'custom',
+            renderingMode:'3d',
+            onAdd:function(map,gl){
+              this._renderer=new THREE.WebGLRenderer({
+                canvas:map.getCanvas(),
+                context:gl,
+                antialias:true,
+              });
+              this._renderer.autoClear=false;
+              this._camera=new THREE.Camera();
+              this._scene=modelScene;
+              // Işıklar
+              this._scene.add(new THREE.AmbientLight(0xffffff,0.8));
+              var sun=new THREE.DirectionalLight(0xfff5e0,1.0);
+              sun.position.set(0.5,1,0.5).normalize();
+              this._scene.add(sun);
+            },
+            render:function(gl,matrix){
+              // MapLibre mercator koordinatına çevir
+              var mapboxgl=window.maplibregl;
+              var lng=ctr[0],lat=ctr[1];
+              // Mercator koordinatları
+              var mc=mapboxgl.MercatorCoordinate.fromLngLat({lng:lng,lat:lat},0);
+              var scale=mc.meterInMercatorCoordinateUnits();
+              // Model boyutu: BIM model scale
+              var mScale=scale*1; // 1 mercator unit = 1m
+              var rotX=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1,0,0),Math.PI/2);
+              var m=new THREE.Matrix4()
+                .makeTranslation(mc.x,mc.y,mc.z)
+                .scale(new THREE.Vector3(mScale,-mScale,mScale))
+                .multiply(rotX);
+              this._camera.projectionMatrix=new THREE.Matrix4().fromArray(matrix).multiply(m);
+              this._renderer.resetState();
+              this._renderer.render(this._scene,this._camera);
+              map.triggerRepaint();
+            }
+          };
+          map.addLayer(customLayer);
+          console.log('BIM CustomLayer eklendi');
+        }
+
+        // BIM model hazırsa ekle, sonra gelirse de ekle
+        if(window.ISDBM_BIM){
+          window.ISDBM_BIM.onModel(function(model){
+            if(model)addBIMLayer(model);
+          });
+        }
+
         // OSM 3D binalar (MapTiler'dan hazır geliyor)
         // MapTiler satellite style içinde zaten building layer var
         // Ek olarak fill-extrusion ekleyelim
@@ -4053,6 +4147,36 @@ var View3D=function(props){
           });
         }
 
+        // BIM fire event
+        map.on('bim-add',function(e){
+          if(e&&e.model&&window.THREE){
+            var THREE=window.THREE;
+            var ctr2=null;
+            for(var i=0;i<parcels.length;i++){var c2=v3dCtr(parcels[i]);if(c2){ctr2=c2;break;}}
+            if(!ctr2)return;
+            if(map.getLayer('bim-custom'))map.removeLayer('bim-custom');
+            var modelScene2=new THREE.Scene();
+            modelScene2.add(new THREE.AmbientLight(0xffffff,0.8));
+            var sun2=new THREE.DirectionalLight(0xfff5e0,1.0);sun2.position.set(0.5,1,0.5).normalize();modelScene2.add(sun2);
+            var mc2=window.maplibregl.MercatorCoordinate.fromLngLat({lng:ctr2[0],lat:ctr2[1]},0);
+            var sc2=mc2.meterInMercatorCoordinateUnits();
+            var clone=e.model.clone(true);modelScene2.add(clone);
+            var cl2={id:'bim-custom',type:'custom',renderingMode:'3d',
+              onAdd:function(map,gl){
+                this._r=new THREE.WebGLRenderer({canvas:map.getCanvas(),context:gl,antialias:true});
+                this._r.autoClear=false;this._cam=new THREE.Camera();this._sc=modelScene2;
+              },
+              render:function(gl,matrix){
+                var rotX=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1,0,0),Math.PI/2);
+                var m=new THREE.Matrix4().makeTranslation(mc2.x,mc2.y,mc2.z).scale(new THREE.Vector3(sc2,-sc2,sc2)).multiply(rotX);
+                this._cam.projectionMatrix=new THREE.Matrix4().fromArray(matrix).multiply(m);
+                this._r.resetState();this._r.render(this._sc,this._cam);map.triggerRepaint();
+              }
+            };
+            map.addLayer(cl2);
+          }
+        });
+
         // OSM 3D binalar yüklendi mi kontrol
         map.on('idle',function(){
           setStatus('');
@@ -4084,7 +4208,18 @@ var View3D=function(props){
     React.createElement('div',{style:{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}},
       React.createElement('button',{onClick:onClose,style:{background:'rgba(0,0,0,.85)',color:'#fff',border:'1px solid #334155',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},'← 2D Harita'),
       React.createElement('button',{onClick:function(){setRotating(function(r){return !r;});},style:{background:'rgba(0,0,0,.85)',color:rotating?'#fbbf24':'#475569',border:'1px solid #334155',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},rotating?'⏸ Durdur':'▶ Döndür'),
-      React.createElement('button',{onClick:function(){setPanelOpen(function(o){return !o;});},style:{background:panelOpen?'rgba(37,99,235,.3)':'rgba(0,0,0,.85)',color:panelOpen?'#60a5fa':'#94a3b8',border:'1px solid '+(panelOpen?'#2563eb':'#334155'),padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},'⚙️ Düzenle')
+      React.createElement('button',{onClick:function(){setPanelOpen(function(o){return !o;});},style:{background:panelOpen?'rgba(37,99,235,.3)':'rgba(0,0,0,.85)',color:panelOpen?'#60a5fa':'#94a3b8',border:'1px solid '+(panelOpen?'#2563eb':'#334155'),padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},"'⚙️ Düzenle'),
+      React.createElement('button',{
+        id:'bim-btn-v3d',
+        onClick:function(){
+          if(window.ISDBM_BIM&&window.ISDBM_BIM.ready&&mapRef.current){
+            mapRef.current.fire('bim-add',{model:window.ISDBM_BIM.model});
+          }else{
+            alert('Önce BIM Viewer\'dan model yükleyip "Haritaya Aktar" butonuna basın.');
+          }
+        },
+        style:{background:'rgba(124,58,237,.3)',color:'#a78bfa',border:'1px solid #7c3aed',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer',fontWeight:600}
+      },'🏗️ BIM')
     ),
 
     // Sol üst lejant
