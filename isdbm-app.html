@@ -3983,12 +3983,12 @@ function createBIMLayer(map, THREE, model, lngLat){
       var sc=mc.meterInMercatorCoordinateUnits()*tr.scale;
       // Rotasyon matisleri
       var rotX=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1,0,0),Math.PI/2);
-      var rotY=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0,1,0),tr.rotY*Math.PI/180);
+      var rotZ=new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0,0,1),tr.rotY*Math.PI/180);
       var m=new THREE.Matrix4()
         .makeTranslation(mc.x,mc.y,mc.z)
         .scale(new THREE.Vector3(sc,-sc,sc))
-        .multiply(rotY)
-        .multiply(rotX);
+        .multiply(rotX)
+        .multiply(rotZ);
       camera.projectionMatrix=new THREE.Matrix4().fromArray(matrix).multiply(m);
       renderer.resetState();
       renderer.render(scene,camera);
