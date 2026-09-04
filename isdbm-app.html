@@ -129,13 +129,13 @@ const INV_TEMPLATES=[
   {name:"Ticari Ofis",           icon:"🏢",birimKey:"ticaret",   insaatKat:1.2, emsalDef:2.5,sinif:"A",
    scoreBonus:{ticari:.3,demografi:.2},roi:"9-13%",irr:"11-15%",sure:"24-36 ay",kapasite:"50.000 m²"},
   {name:"Karma Kullanım",        icon:"🏙️",birimKey:"karma",     insaatKat:1.1, emsalDef:2.5,sinif:"A/B",
-   scoreBonus:{demografi:.2,ticari:.2},roi:"8-14%",irr:"10-16%",sure:"36-48 ay",kapasite:"15.000 m²"},
+   scoreBonus:{demografi:.28,ticari:.27},roi:"8-14%",irr:"10-16%",sure:"36-48 ay",kapasite:"15.000 m²"},
   {name:"Otel / Turizm",         icon:"🏨",birimKey:"otel",      insaatKat:1.3, emsalDef:1.8,sinif:"A",
    scoreBonus:{ulasim:.25,demografi:.15},roi:"7-12%",irr:"9-14%",sure:"18-30 ay",kapasite:"50-300 oda"},
   {name:"AVM / Ticaret Merkezi", icon:"🛒",birimKey:"avm",       insaatKat:1.2, emsalDef:1.5,sinif:"A",
    scoreBonus:{ticari:.3,demografi:.2},roi:"9-13%",irr:"11-15%",sure:"24-36 ay",kapasite:"50.000 m²"},
   {name:"Lojistik Merkezi",      icon:"🚚",birimKey:"lojistik",  insaatKat:1.0, emsalDef:0.6,sinif:"B",
-   scoreBonus:{ulasim:.3,altyapi:.2}, roi:"14-20%",irr:"16-24%",sure:"18-24 ay",kapasite:"50.000 m²"},
+   scoreBonus:{ulasim:.15,altyapi:.1}, roi:"14-20%",irr:"16-24%",sure:"18-24 ay",kapasite:"50.000 m²"},
   {name:"Endüstriyel Tesis",     icon:"🏭",birimKey:"endustri",  insaatKat:0.9, emsalDef:0.7,sinif:"B/C",
    scoreBonus:{altyapi:.25,ulasim:.25},roi:"11-17%",irr:"13-19%",sure:"12-18 ay",kapasite:"Özelleştirilmiş"},
   {name:"Data Center Campus",    icon:"🖥️",birimKey:"datacenter",insaatKat:1.0, emsalDef:0.5,sinif:"A++",
@@ -3594,7 +3594,7 @@ var BIMViewer=({parcel,onClose})=>{
   async function loadGLB(file){
     setStatus('GLB/glTF yükleniyor...');
     try{
-      await loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js');
+      await loadScript('https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js');
       const THREE=window.THREE;
       const url=URL.createObjectURL(file);
       const loader=new THREE.GLTFLoader();
@@ -3669,7 +3669,7 @@ var BIMViewer=({parcel,onClose})=>{
   async function loadOBJ(file){
     setStatus('OBJ yükleniyor...');
     try{
-      await loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js');
+      await loadScript('https://unpkg.com/three@0.128.0/examples/js/loaders/OBJLoader.js');
       // MTL varsa aynı klasörden alınır — burada sadece OBJ
       const THREE=window.THREE;
       const text=await file.text();
@@ -3862,25 +3862,33 @@ function fetchPOI3D(lat,lng){
 // ── BIM Loader — View3D içinde ──────────────────────────────────────────
 function bimLoadModel(files, onModel, onStatus){
   var glbFile=null,objFile=null,mtlFile=null,fbxFile=null,ifcFile=null;
-  Array.from(files).forEach(function(f){
-    var ext=f.name.split('.').pop().toLowerCase();
+  var fileArr=[];
+  // FileList → Array güvenli dönüşüm
+  if(files.length!==undefined){for(var fi=0;fi<files.length;fi++)fileArr.push(files[fi]);}
+  else{fileArr=Array.from(files);}
+  console.log('BIM files:',fileArr.map(function(f){return f.name;}));
+  fileArr.forEach(function(f){
+    var parts=f.name.split('.');
+    var ext=parts[parts.length-1].toLowerCase().trim();
+    console.log('ext:',ext,'file:',f.name);
     if(ext==='glb'||ext==='gltf')glbFile=f;
     else if(ext==='obj')objFile=f;
     else if(ext==='mtl')mtlFile=f;
     else if(ext==='fbx')fbxFile=f;
     else if(ext==='ifc')ifcFile=f;
   });
+  console.log('parsed:',{glb:!!glbFile,obj:!!objFile,mtl:!!mtlFile,fbx:!!fbxFile,ifc:!!ifcFile});
 
   if(glbFile){
     onStatus('GLB yükleniyor...');
-    loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js').then(function(){
+    loadJS('https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js').then(function(){
       var url=URL.createObjectURL(glbFile);
       new window.THREE.GLTFLoader().load(url,function(g){URL.revokeObjectURL(url);onModel(g.scene,'GLB',glbFile.name);onStatus('');},null,function(e){onStatus('GLB hata:'+e.message);});
     });
   } else if(objFile){
     onStatus('OBJ yükleniyor...');
-    loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js').then(function(){
-      return mtlFile?loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js'):Promise.resolve();
+    loadJS('https://unpkg.com/three@0.128.0/examples/js/loaders/OBJLoader.js').then(function(){
+      return mtlFile?loadJS('https://unpkg.com/three@0.128.0/examples/js/loaders/MTLLoader.js'):Promise.resolve();
     }).then(function(){
       if(mtlFile&&window.THREE.MTLLoader){
         onStatus('MTL yükleniyor...');
@@ -3905,7 +3913,7 @@ function bimLoadModel(files, onModel, onStatus){
   } else if(fbxFile){
     onStatus('FBX yükleniyor...');
     loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js').then(function(){
-      return loadJS('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js');
+      return loadJS('https://unpkg.com/three@0.128.0/examples/js/loaders/FBXLoader.js');
     }).then(function(){
       fbxFile.arrayBuffer().then(function(buf){
         try{var fbx=new window.THREE.FBXLoader().parse(buf);onModel(fbx,'FBX',fbxFile.name);onStatus('');}
