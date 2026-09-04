@@ -3650,7 +3650,7 @@ var View3D=function(props){
       });
       mapRef.current=map;
 
-      map.on('load',function(){
+      map.on('load',function(){console.log('MAP LOAD fired');
         setStatus('');
 
         // Terrain — gerçek arazi yüksekliği
@@ -3661,15 +3661,7 @@ var View3D=function(props){
         });
         map.setTerrain({source:'terrain-src',exaggeration:1.0});
 
-        // Gökyüzü
-        map.setSky({
-          'sky-color':'#1a2a4a',
-          'sky-horizon-blend':0.5,
-          'horizon-color':'#4a6a9a',
-          'horizon-fog-blend':0.5,
-          'fog-color':'#223355',
-          'fog-ground-blend':0.5,
-        });
+        // Gökyüzü (//setSky_disabled MapLibre 4+ gerektirir, atlandı)
 
         // OSM 3D binalar (MapTiler'dan hazır geliyor)
         // MapTiler satellite style içinde zaten building layer var
