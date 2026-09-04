@@ -4195,7 +4195,7 @@ var View3D=function(props){
     ),
 
     // BIM Transform paneli — ⚙️ Düzenle panelinde bimInfo varsa göster
-    panelOpen&&bimInfo?React.createElement('div',{style:{position:'absolute',bottom:80,right:12,zIndex:10,background:'rgba(0,0,0,.92)',border:'1px solid #7c3aed',borderRadius:12,padding:14,width:210,marginTop:8}},
+    panelOpen&&bimInfo?React.createElement('div',{style:{position:'absolute',bottom:20,left:12,zIndex:11,background:'rgba(0,0,0,.92)',border:'1px solid #7c3aed',borderRadius:12,padding:14,width:210,maxHeight:'60vh',overflowY:'auto'}},
       React.createElement('div',{style:{fontSize:11,color:'#a78bfa',fontWeight:700,marginBottom:10}},'🏗️ BIM Konumlandırma'),
       // Sağ/Sol
       React.createElement('div',{style:{marginBottom:7}},
@@ -4312,7 +4312,7 @@ var View3D=function(props){
     ):null,
 
     // Sol alt info
-    React.createElement('div',{style:{position:'absolute',bottom:20,left:12,zIndex:10,background:'rgba(0,0,0,.8)',border:'1px solid #334155',borderRadius:10,padding:12,minWidth:170}},
+    React.createElement('div',{style:{position:'absolute',bottom:panelOpen&&bimInfo?'auto':20,top:panelOpen&&bimInfo?12:'auto',left:12,zIndex:10,background:'rgba(0,0,0,.8)',border:'1px solid #334155',borderRadius:10,padding:12,minWidth:170}},
       React.createElement('div',{style:{fontSize:10,color:'#475569',fontWeight:600,marginBottom:5}},'3D GÖRÜNÜM · MapLibre GL'),
       parcels[0]?React.createElement('div',null,
         React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#fff',marginBottom:1}},parcels[0].projeAdi||'İsimsiz'),
