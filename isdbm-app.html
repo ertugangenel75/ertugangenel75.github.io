@@ -408,9 +408,9 @@ async function reverseGeocode(lat,lng){
     const d=await r.json();
     const a=d.address||{};
     return{
-      il:a.province||a.state||"",
-      ilce:a.county||a.city_district||a.suburb||"",
-      mahalle:a.neighbourhood||a.quarter||a.suburb||"",
+      il:a.province||a.state||a.city||"",
+      ilce:a.county||a.city_district||a.district||a.town||a.municipality||a.suburb||"",
+      mahalle:a.neighbourhood||a.quarter||a.village||a.hamlet||"",
       postakodu:a.postcode||"",
       display:d.display_name||"",
     };
@@ -3284,10 +3284,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 
 <script>
-var IMAR_YUK={'Konut Imarli':35,'Ticaret Imarli':55,'Sanayi Imarli':18,'Lojistik Imarli':15,'Turizm Imarli':45,'Tarim / Imarsiz':6,'Belirsiz':20};
-var IMAR_HEX={'Konut Imarli':'#2563eb','Ticaret Imarli':'#16a34a','Sanayi Imarli':'#f59e0b','Lojistik Imarli':'#8b5cf6','Turizm Imarli':'#ec4899','Tarim / Imarsiz':'#64748b','Belirsiz':'#94a3b8'};
+// ── ISDBM View3D ──────────────────────────────────────────────────────────
+var IMAR_YUK={'Konut Bölgesi':35,'Ticaret Bölgesi':55,'Karma Kullanım':40,'Turizm Bölgesi':45,'Lojistik Bölgesi':15,'Sanayi Bölgesi':18,'Tarim / Imarsiz':6,'Belirsiz':20};
+var IMAR_HEX={'Konut Bölgesi':'#2563eb','Ticaret Bölgesi':'#16a34a','Karma Kullanım':'#8b5cf6','Turizm Bölgesi':'#ec4899','Lojistik Bölgesi':'#f59e0b','Sanayi Bölgesi':'#f97316','Tarim / Imarsiz':'#64748b','Belirsiz':'#94a3b8'};
+var POI_COL={'Ulaşım':0x3b82f6,'Sağlık':0xef4444,'Eğitim':0x16a34a,'Ticaret':0xf59e0b,'Konaklama':0x8b5cf6,'Finans':0x06b6d4,'Yeşil Alan':0x22c55e,'Resmi Kurum':0x6366f1,'Dini':0xa78bfa,'Sosyal':0xf472b6,'Diğer':0xfbbf24};
 
-function loadThreeJS(){
+function v3dLoadThree(){
   return new Promise(function(res,rej){
     if(window.THREE){res(window.THREE);return;}
     var s=document.createElement('script');
@@ -3297,176 +3299,322 @@ function loadThreeJS(){
   });
 }
 
-function latLngToTile(lat,lng,zoom){
-  var n=Math.pow(2,zoom);
-  var x=Math.floor((lng+180)/360*n);
-  var latRad=lat*Math.PI/180;
-  var y=Math.floor((1-Math.log(Math.tan(latRad)+1/Math.cos(latRad))/Math.PI)/2*n);
-  return {x:x,y:y};
+// Parsel merkezi hesapla — coords [lat,lng] formatında
+function v3dCenter(p){
+  if(p.lat&&p.lng&&p.lat!==0&&p.lng!==0)return{lat:+p.lat,lng:+p.lng};
+  var arr=p.coords||p.coordinates||[];
+  if(arr.length>0){
+    var sl=0,sn=0;
+    arr.forEach(function(c){sl+=parseFloat(c[0]);sn+=parseFloat(c[1]);});
+    return{lat:sl/arr.length,lng:sn/arr.length};
+  }
+  return null;
 }
 
-function buildMapTexture(THREE,lat,lng,cb){
-  var zoom=16,t=latLngToTile(lat,lng,zoom);
+// OSM tile — zoom 17 daha yakın
+function v3dTileUrl(lat,lng,zoom){
+  var n=Math.pow(2,zoom);
+  var x=Math.floor((lng+180)/360*n);
+  var lr=lat*Math.PI/180;
+  var y=Math.floor((1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n);
+  var srv=['a','b','c'][Math.abs(x+y)%3];
+  return 'https://'+srv+'.tile.openstreetmap.org/'+zoom+'/'+x+'/'+y+'.png';
+}
+
+// 3x3 grid canvas texture
+function v3dMapTex(THREE,lat,lng,cb){
+  var zoom=17;
+  var n=Math.pow(2,zoom);
+  var cx=Math.floor((lng+180)/360*n);
+  var lr=lat*Math.PI/180;
+  var cy=Math.floor((1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n);
   var can=document.createElement('canvas');
   can.width=768;can.height=768;
   var ctx=can.getContext('2d');
-  ctx.fillStyle='#0a1628';ctx.fillRect(0,0,768,768);
-  var loaded=0,total=9,srv=['a','b','c'];
+  ctx.fillStyle='#bfdbfe';ctx.fillRect(0,0,768,768);
+  var done=0;
   for(var dy=-1;dy<=1;dy++){
     for(var dx=-1;dx<=1;dx++){
       (function(dx,dy){
-        var tx=t.x+dx,ty=t.y+dy;
-        var url='https://'+srv[Math.abs(tx+ty)%3]+'.tile.openstreetmap.org/'+zoom+'/'+tx+'/'+ty+'.png';
+        var tx=cx+dx,ty=cy+dy;
+        var srv=['a','b','c'][Math.abs(tx+ty)%3];
+        var url='https://'+srv+'.tile.openstreetmap.org/'+zoom+'/'+tx+'/'+ty+'.png';
         var img=new Image();img.crossOrigin='anonymous';
-        img.onload=function(){ctx.drawImage(img,(dx+1)*256,(dy+1)*256,256,256);if(++loaded===total)cb(new THREE.CanvasTexture(can));};
-        img.onerror=function(){if(++loaded===total)cb(new THREE.CanvasTexture(can));};
+        img.onload=function(){
+          ctx.drawImage(img,(dx+1)*256,(dy+1)*256,256,256);
+          if(++done===9)cb(new THREE.CanvasTexture(can));
+        };
+        img.onerror=function(){if(++done===9)cb(new THREE.CanvasTexture(can));};
         img.src=url;
       })(dx,dy);
     }
   }
 }
 
-function fetchBldgs(lat,lng){
-  var q='[out:json][timeout:15];way["building"](around:500,'+lat+','+lng+');out body;>;out skel qt;';
-  return fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:q})
+// OSM binalar
+function v3dBldgs(lat,lng){
+  var q='[out:json][timeout:20];way["building"](around:400,'+lat+','+lng+');out body;>;out skel qt;';
+  return fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:q,signal:AbortSignal.timeout(20000)})
     .then(function(r){return r.json();})
     .then(function(d){
-      var nodes={};
-      d.elements.forEach(function(e){if(e.type==='node')nodes[e.id]=[e.lat,e.lon];});
+      var nd={};d.elements.forEach(function(e){if(e.type==='node')nd[e.id]=[e.lat,e.lon];});
       return d.elements.filter(function(e){return e.type==='way'&&e.nodes&&e.nodes.length>2;}).map(function(w){
-        var c=w.nodes.map(function(id){return nodes[id];}).filter(Boolean);
+        var c=w.nodes.map(function(id){return nd[id];}).filter(Boolean);
         var h=parseInt((w.tags&&w.tags.height)||String(parseInt((w.tags&&w.tags['building:levels'])||'3')*3.5));
-        return {coords:c,height:Math.max(h,5)};
+        return{coords:c,height:Math.max(h,4)};
       }).filter(function(b){return b.coords.length>2;});
-    }).catch(function(){return [];});
+    }).catch(function(){return[];});
 }
 
-function hexInt(h){return parseInt(h.replace('#',''),16);}
-function getCenter(p){
-  if(p.lat&&p.lng)return{lat:p.lat,lng:p.lng};
-  var arr=p.coordinates||p.coords||[];
-  if(arr.length){var sl=0,sn=0;arr.forEach(function(c){sl+=c[0];sn+=c[1];});return{lat:sl/arr.length,lng:sn/arr.length};}
-  return{lat:41,lng:29};
-}
+function v3dHex(h){return parseInt((h||'#888888').replace('#',''),16);}
 
 var View3D=function(props){
-  var parcels=props.parcels,onClose=props.onClose;
+  var parcels=props.parcels||[];
+  var onClose=props.onClose;
   var mountRef=React.useRef(null);
-  var st=React.useRef({theta:20,phi:45,r:150,drag:false,px:0,py:0});
+  var camSt=React.useRef({theta:25,phi:42,r:120,drag:false,px:0,py:0});
   var rafRef=React.useRef(null),rendRef=React.useRef(null),rotRef=React.useRef(true);
-  var s1=React.useState('Harita yükleniyor...'),status=s1[0],setStatus=s1[1];
-  var s2=React.useState(0),bldCount=s2[0],setBldCount=s2[1];
-  var s3=React.useState(true),rotating=s3[0],setRotating=s3[1];
+  var r1=React.useState('Three.js yükleniyor...'),status=r1[0],setStatus=r1[1];
+  var r2=React.useState(0),bldN=r2[0],setBldN=r2[1];
+  var r3=React.useState(0),poiN=r3[0],setPoiN=r3[1];
+  var r4=React.useState(true),rotating=r4[0],setRotating=r4[1];
   React.useEffect(function(){rotRef.current=rotating;},[rotating]);
 
   React.useEffect(function(){
-    var THREE,renderer,camera,scene;
-    loadThreeJS().then(function(T){
+    if(!mountRef.current)return;
+    var THREE,renderer,camera,scene,animId;
+
+    v3dLoadThree().then(function(T){
       THREE=T;
-      var w=mountRef.current.clientWidth,h=mountRef.current.clientHeight;
-      scene=new THREE.Scene();scene.background=new THREE.Color(0x050d1a);
-      scene.fog=new THREE.FogExp2(0x050d1a,0.0025);
-      camera=new THREE.PerspectiveCamera(50,w/h,0.1,2000);
+      var W=mountRef.current.clientWidth,H=mountRef.current.clientHeight;
+
+      // Scene
+      scene=new THREE.Scene();
+      scene.background=new THREE.Color(0x0f1a2e);
+      scene.fog=new THREE.FogExp2(0x0f1a2e,0.002);
+
+      // Camera
+      camera=new THREE.PerspectiveCamera(50,W/H,0.1,3000);
+
+      // Renderer
       renderer=new THREE.WebGLRenderer({antialias:true});
       renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-      renderer.setSize(w,h);renderer.shadowMap.enabled=true;
-      rendRef.current=renderer;mountRef.current.appendChild(renderer.domElement);
-      scene.add(new THREE.AmbientLight(0x334466,1.0));
-      var sun=new THREE.DirectionalLight(0xffffff,0.9);sun.position.set(60,150,60);sun.castShadow=true;scene.add(sun);
-      scene.add(new THREE.PointLight(0x3b82f6,1.2,250,0));
-      var ctr=getCenter(parcels[0]||{});
-      var cLat=ctr.lat,cLng=ctr.lng,SC=80000,GS=300;
+      renderer.setSize(W,H);
+      renderer.shadowMap.enabled=true;
+      rendRef.current=renderer;
+      mountRef.current.appendChild(renderer.domElement);
+
+      // Işıklar
+      scene.add(new THREE.AmbientLight(0x334466,1.2));
+      var sun=new THREE.DirectionalLight(0xffffff,1.0);
+      sun.position.set(80,200,80);sun.castShadow=true;
+      sun.shadow.mapSize.width=2048;sun.shadow.mapSize.height=2048;
+      scene.add(sun);
+      scene.add(new THREE.HemisphereLight(0x6699cc,0x223344,0.4));
+
+      // Merkez koordinat — tüm parsellerden ortalama
+      var ctrPar=null;
+      for(var i=0;i<parcels.length;i++){var c=v3dCenter(parcels[i]);if(c){ctrPar=c;break;}}
+      if(!ctrPar){setStatus('Koordinat bulunamadı');return;}
+      var cLat=ctrPar.lat,cLng=ctrPar.lng;
+
+      // Scale — 1 lat derece ~111km, 1 birim = 1m olsun
+      // 111000m/derece → SC=111000 ile 1 birim=1m
+      // Ama Three.js birim büyük — 1 birim = 1m mantıklı
+      var SC=111000; // 1 derece lat = 111000 birim → 1 birim = 1m
+      var GS=600; // zemin 600m x 600m
+
+      // Zemin — OSM harita texture
       var gGeo=new THREE.PlaneGeometry(GS,GS);
-      var gMat=new THREE.MeshLambertMaterial({color:0x223355});
-      var gnd=new THREE.Mesh(gGeo,gMat);gnd.rotation.x=-Math.PI/2;gnd.receiveShadow=true;scene.add(gnd);
-      buildMapTexture(THREE,cLat,cLng,function(tex){gMat.map=tex;gMat.color.set(0xffffff);gMat.needsUpdate=true;setStatus('Binalar...');});
-      var grid=new THREE.GridHelper(GS,30,0x1e3a5f,0x1e3a5f);grid.material.transparent=true;grid.material.opacity=0.12;grid.position.y=0.5;scene.add(grid);
-      var h3dc=15;
-      parcels.forEach(function(p){
-        var h3d=IMAR_YUK[p.planDurumu]||20;if(h3d>h3dc)h3dc=h3d/2;
-        var col=hexInt(IMAR_HEX[p.planDurumu]||'#2563eb');
-        var mat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.9});
-        var glw=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.12,side:THREE.BackSide});
-        var coords=p.coordinates||p.coords||[];
+      var gMat=new THREE.MeshLambertMaterial({color:0x4a90d9});
+      var gnd=new THREE.Mesh(gGeo,gMat);
+      gnd.rotation.x=-Math.PI/2;gnd.receiveShadow=true;scene.add(gnd);
+
+      setStatus('Harita yükleniyor...');
+      v3dMapTex(THREE,cLat,cLng,function(tex){
+        gMat.map=tex;gMat.color.set(0xffffff);gMat.needsUpdate=true;
+        setStatus('Binalar yükleniyor...');
+      });
+
+      // Hafif grid
+      var gr=new THREE.GridHelper(GS,60,0x1e3a5f,0x1e3a5f);
+      gr.material.transparent=true;gr.material.opacity=0.08;gr.position.y=0.3;scene.add(gr);
+
+      // LNG scale — enlem derecess cosine düzeltmesi
+      var LNG_SC=SC*Math.cos(cLat*Math.PI/180);
+
+      // Parseller
+      var maxH=20;
+      parcels.forEach(function(p,pi){
+        var planDur=p.planDurumu||'Belirsiz';
+        var h3d=IMAR_YUK[planDur]||20;
+        if(h3d>maxH)maxH=h3d;
+        var col=v3dHex(IMAR_HEX[planDur]||'#94a3b8');
+        var mat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.88});
+        var glwMat=new THREE.MeshLambertMaterial({color:col,transparent:true,opacity:0.1,side:THREE.BackSide});
+
+        var coords=p.coords||p.coordinates||[];
+        var pc=v3dCenter(p);
+        if(!pc)return;
+
         if(coords.length>=3){
           try{
-            var pts=coords.map(function(c){return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC);});
-            var geo=new THREE.ExtrudeGeometry(new THREE.Shape(pts),{depth:h3d,bevelEnabled:false});
-            geo.rotateX(-Math.PI/2);
-            var mesh=new THREE.Mesh(geo,mat);mesh.castShadow=true;scene.add(mesh);
-            scene.add(new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape(pts),{depth:h3d+1,bevelEnabled:false}).rotateX(-Math.PI/2)||geo,glw));
-            scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.4})));
-          }catch(e){}
+            // coords [lat,lng] → Vector2(x,z) düzleminde
+            var pts=coords.map(function(c){
+              return new THREE.Vector2(
+                (parseFloat(c[1])-cLng)*LNG_SC,  // X = doğu-batı
+                (parseFloat(c[0])-cLat)*SC         // Y = kuzey-güney (Three Z eksenine döner)
+              );
+            });
+            var shape=new THREE.Shape(pts);
+            var extGeo=new THREE.ExtrudeGeometry(shape,{depth:h3d,bevelEnabled:false});
+            extGeo.rotateX(-Math.PI/2);
+            var mesh=new THREE.Mesh(extGeo,mat);mesh.castShadow=true;scene.add(mesh);
+            // Glow
+            var gGeo2=new THREE.ExtrudeGeometry(shape,{depth:h3d+1,bevelEnabled:false});
+            gGeo2.rotateX(-Math.PI/2);
+            scene.add(new THREE.Mesh(gGeo2,glwMat));
+            // Kenar
+            scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(extGeo),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.5})));
+            // Üst ışık
+            var cx2=pts.reduce(function(s,v){return s+v.x;},0)/pts.length;
+            var cz2=pts.reduce(function(s,v){return s+v.y;},0)/pts.length;
+            var pl=new THREE.PointLight(col,2,150);pl.position.set(cx2,h3d+20,cz2);scene.add(pl);
+          }catch(e){console.warn('Polygon err',e);}
         }else{
-          var pc=getCenter(p),x=(pc.lng-cLng)*SC,z=(pc.lat-cLat)*SC;
-          var bG=new THREE.BoxGeometry(8,h3d,8);
-          var m2=new THREE.Mesh(bG,mat);m2.position.set(x,h3d/2,z);m2.castShadow=true;scene.add(m2);
+          // Koordinatsız — kutu
+          var px2=(pc.lng-cLng)*LNG_SC,pz2=(pc.lat-cLat)*SC;
+          // Parsel alanından boyut hesapla (m²)
+          var alan=parseFloat(p.alan)||500;
+          var side=Math.min(Math.sqrt(alan)*0.8,40); // max 40m
+          var bG=new THREE.BoxGeometry(side,h3d,side);
+          var bM=new THREE.Mesh(bG,mat);bM.position.set(px2,h3d/2,pz2);bM.castShadow=true;scene.add(bM);
           scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(bG),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.5})));
-          var rg=new THREE.RingGeometry(4,6,32);
-          var rm=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.8,side:THREE.DoubleSide}));
-          rm.rotation.x=-Math.PI/2;rm.position.set(x,h3d+0.5,z);scene.add(rm);
-          var pl=new THREE.PointLight(col,3,120);pl.position.set(x,h3d+15,z);scene.add(pl);
+          var rG=new THREE.RingGeometry(side*0.6,side*0.75,32);
+          var rM=new THREE.Mesh(rG,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.7,side:THREE.DoubleSide}));
+          rM.rotation.x=-Math.PI/2;rM.position.set(px2,h3d+0.3,pz2);scene.add(rM);
+          var pLight=new THREE.PointLight(col,2.5,120);pLight.position.set(px2,h3d+25,pz2);scene.add(pLight);
         }
+
         // POI pinleri
-        var PC={'Ulaşım':0x3b82f6,'Sağlık':0xef4444,'Eğitim':0x16a34a,'Ticaret':0xf59e0b,'Konaklama':0x8b5cf6,'Diğer':0xfbbf24};
-        (p.pois||[]).forEach(function(poi){
+        var pois=p.pois||[];
+        var poiAdded=0;
+        pois.forEach(function(poi){
           if(!poi.lat||!poi.lng)return;
-          var px=(poi.lng-cLng)*SC,pz=(poi.lat-cLat)*SC;
-          if(Math.abs(px)>140||Math.abs(pz)>140)return;
-          var pc2=PC[poi.kategori]||0xfbbf24;
-          var pin=new THREE.Mesh(new THREE.CylinderGeometry(1,1,6,6),new THREE.MeshLambertMaterial({color:pc2}));
-          pin.position.set(px,3,pz);scene.add(pin);
-          var dot=new THREE.Mesh(new THREE.SphereGeometry(2,6,6),new THREE.MeshLambertMaterial({color:pc2}));
-          dot.position.set(px,7,pz);scene.add(dot);
+          var px3=(parseFloat(poi.lng)-cLng)*LNG_SC;
+          var pz3=(parseFloat(poi.lat)-cLat)*SC;
+          if(Math.abs(px3)>290||Math.abs(pz3)>290)return;
+          var pc3=POI_COL[poi.kategori]||0xfbbf24;
+          // İnce silindir gövde
+          var pinG=new THREE.CylinderGeometry(0.8,0.8,8,6);
+          var pin=new THREE.Mesh(pinG,new THREE.MeshLambertMaterial({color:pc3}));
+          pin.position.set(px3,4,pz3);scene.add(pin);
+          // Top
+          var dotG=new THREE.SphereGeometry(2,8,8);
+          var dot=new THREE.Mesh(dotG,new THREE.MeshLambertMaterial({color:pc3,emissive:pc3,emissiveIntensity:0.3}));
+          dot.position.set(px3,9,pz3);scene.add(dot);
+          poiAdded++;
         });
+        if(pi===0)setPoiN(poiAdded);
       });
-      var bP=(cLat!==41||cLng!==29)?fetchBldgs(cLat,cLng):Promise.resolve([]);
-      bP.then(function(blds){
-        setBldCount(blds.length);
+
+      // OSM binalar
+      v3dBldgs(cLat,cLng).then(function(blds){
+        setBldN(blds.length);
         blds.forEach(function(b){
           try{
-            var pts=b.coords.map(function(c){return new THREE.Vector2((c[1]-cLng)*SC,(c[0]-cLat)*SC);});
+            var pts=b.coords.map(function(c){
+              return new THREE.Vector2((parseFloat(c[1])-cLng)*LNG_SC,(parseFloat(c[0])-cLat)*SC);
+            });
             if(pts.length<3)return;
-            var geo=new THREE.ExtrudeGeometry(new THREE.Shape(pts),{depth:Math.min(b.height,80),bevelEnabled:false});
+            var geo=new THREE.ExtrudeGeometry(new THREE.Shape(pts),{depth:Math.min(b.height,100),bevelEnabled:false});
             geo.rotateX(-Math.PI/2);
-            scene.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x1a3a5c,transparent:true,opacity:0.75})));
+            scene.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x1e3a5f,transparent:true,opacity:0.75})));
           }catch(e){}
         });
         setStatus('');
       });
+
+      // Mouse/touch
       var el=renderer.domElement;
-      el.addEventListener('mousedown',function(e){st.current.drag=true;st.current.px=e.clientX;st.current.py=e.clientY;});
-      el.addEventListener('mouseup',function(){st.current.drag=false;});
-      el.addEventListener('mouseleave',function(){st.current.drag=false;});
-      el.addEventListener('mousemove',function(e){if(!st.current.drag)return;st.current.theta-=(e.clientX-st.current.px)*0.4;st.current.phi=Math.max(8,Math.min(75,st.current.phi-(e.clientY-st.current.py)*0.4));st.current.px=e.clientX;st.current.py=e.clientY;});
-      el.addEventListener('wheel',function(e){st.current.r=Math.max(40,Math.min(500,st.current.r+e.deltaY*0.15));e.preventDefault();},{passive:false});
-      var lt=null;
-      el.addEventListener('touchstart',function(e){lt=e.touches[0];},{passive:true});
-      el.addEventListener('touchmove',function(e){if(!lt)return;st.current.theta-=(e.touches[0].clientX-lt.clientX)*0.5;st.current.phi=Math.max(8,Math.min(75,st.current.phi-(e.touches[0].clientY-lt.clientY)*0.5));lt=e.touches[0];e.preventDefault();},{passive:false});
-      function animate(){rafRef.current=requestAnimationFrame(animate);if(rotRef.current&&!st.current.drag)st.current.theta+=0.10;var t=st.current.theta*Math.PI/180,p=st.current.phi*Math.PI/180,r=st.current.r;camera.position.set(r*Math.sin(t)*Math.cos(p),r*Math.sin(p),r*Math.cos(t)*Math.cos(p));camera.lookAt(0,h3dc,0);renderer.render(scene,camera);}
+      el.addEventListener('mousedown',function(e){camSt.current.drag=true;camSt.current.px=e.clientX;camSt.current.py=e.clientY;});
+      el.addEventListener('mouseup',function(){camSt.current.drag=false;});
+      el.addEventListener('mouseleave',function(){camSt.current.drag=false;});
+      el.addEventListener('mousemove',function(e){
+        if(!camSt.current.drag)return;
+        camSt.current.theta-=(e.clientX-camSt.current.px)*0.4;
+        camSt.current.phi=Math.max(5,Math.min(78,camSt.current.phi-(e.clientY-camSt.current.py)*0.4));
+        camSt.current.px=e.clientX;camSt.current.py=e.clientY;
+      });
+      el.addEventListener('wheel',function(e){camSt.current.r=Math.max(20,Math.min(800,camSt.current.r+e.deltaY*0.1));e.preventDefault();},{passive:false});
+      var lt2=null;
+      el.addEventListener('touchstart',function(e){lt2=e.touches[0];},{passive:true});
+      el.addEventListener('touchmove',function(e){
+        if(!lt2)return;
+        camSt.current.theta-=(e.touches[0].clientX-lt2.clientX)*0.5;
+        camSt.current.phi=Math.max(5,Math.min(78,camSt.current.phi-(e.touches[0].clientY-lt2.clientY)*0.5));
+        lt2=e.touches[0];e.preventDefault();
+      },{passive:false});
+
+      // Animate
+      function animate(){
+        animId=requestAnimationFrame(animate);
+        if(rotRef.current&&!camSt.current.drag)camSt.current.theta+=0.08;
+        var t=camSt.current.theta*Math.PI/180,ph=camSt.current.phi*Math.PI/180,r=camSt.current.r;
+        camera.position.set(r*Math.sin(t)*Math.cos(ph),r*Math.sin(ph),r*Math.cos(t)*Math.cos(ph));
+        camera.lookAt(0,maxH/2,0);
+        renderer.render(scene,camera);
+      }
+      rafRef.current=animId;
       animate();
-      window.addEventListener('resize',function(){if(!mountRef.current)return;var nw=mountRef.current.clientWidth,nh=mountRef.current.clientHeight;camera.aspect=nw/nh;camera.updateProjectionMatrix();renderer.setSize(nw,nh);});
-    }).catch(function(e){setStatus('Hata:'+e.message);});
-    return function(){cancelAnimationFrame(rafRef.current);if(rendRef.current&&mountRef.current){try{mountRef.current.removeChild(rendRef.current.domElement);}catch(e){}rendRef.current.dispose();}};
+
+      window.addEventListener('resize',function(){
+        if(!mountRef.current)return;
+        var nw=mountRef.current.clientWidth,nh=mountRef.current.clientHeight;
+        camera.aspect=nw/nh;camera.updateProjectionMatrix();renderer.setSize(nw,nh);
+      });
+    }).catch(function(e){setStatus('Hata: '+e.message);});
+
+    return function(){
+      cancelAnimationFrame(rafRef.current);
+      if(rendRef.current&&mountRef.current){
+        try{mountRef.current.removeChild(rendRef.current.domElement);}catch(e){}
+        rendRef.current.dispose();
+      }
+    };
   },[]);
 
-  return React.createElement('div',{style:{position:'fixed',inset:0,background:'#050d1a',overflow:'hidden',zIndex:9999}},
+  var cp=parcels[0]?v3dCenter(parcels[0]):null;
+  return React.createElement('div',{style:{position:'fixed',inset:0,background:'#0f1a2e',overflow:'hidden',zIndex:9999}},
     React.createElement('div',{ref:mountRef,style:{width:'100%',height:'100%'}}),
-    status?React.createElement('div',{style:{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(5,13,26,.85)',border:'1px solid #1e3a5f',borderRadius:8,padding:'6px 16px',color:'#60a5fa',fontSize:12,pointerEvents:'none',whiteSpace:'nowrap'}},status):null,
+    // Status
+    status?React.createElement('div',{style:{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',background:'rgba(15,26,46,.88)',border:'1px solid #1e3a5f',borderRadius:8,padding:'6px 18px',color:'#60a5fa',fontSize:12,pointerEvents:'none',whiteSpace:'nowrap',zIndex:10}},status):null,
+    // Toolbar
     React.createElement('div',{style:{position:'absolute',top:12,right:12,zIndex:10,display:'flex',flexDirection:'column',gap:8}},
-      React.createElement('button',{onClick:onClose,style:{background:'rgba(5,13,26,.9)',color:'#fff',border:'1px solid #1e3a5f',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},'← 2D Harita'),
-      React.createElement('button',{onClick:function(){setRotating(function(r){return !r;});},style:{background:'rgba(5,13,26,.9)',color:rotating?'#fbbf24':'#475569',border:'1px solid #1e3a5f',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},rotating?'⏸ Durdur':'▶ Döndür')
+      React.createElement('button',{onClick:onClose,style:{background:'rgba(15,26,46,.92)',color:'#fff',border:'1px solid #1e3a5f',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}},'← 2D Harita'),
+      React.createElement('button',{onClick:function(){setRotating(function(r){return !r;});},style:{background:'rgba(15,26,46,.92)',color:rotating?'#fbbf24':'#475569',border:'1px solid #1e3a5f',padding:'6px 12px',borderRadius:8,fontSize:12,cursor:'pointer'}},rotating?'⏸ Durdur':'▶ Döndür')
     ),
-    React.createElement('div',{style:{position:'absolute',bottom:80,left:12,zIndex:10,background:'rgba(5,13,26,.92)',border:'1px solid #1e3a5f',borderRadius:10,padding:12,minWidth:170}},
+    // POI lejant
+    React.createElement('div',{style:{position:'absolute',top:12,left:12,zIndex:10,background:'rgba(15,26,46,.88)',border:'1px solid #1e3a5f',borderRadius:8,padding:'8px 12px'}},
+      React.createElement('div',{style:{fontSize:9,color:'#475569',fontWeight:700,marginBottom:5,letterSpacing:1}},'🏙️ ISDBM 3D'),
+      [['Ulaşım','#3b82f6'],['Sağlık','#ef4444'],['Eğitim','#16a34a'],['Ticaret','#f59e0b'],['Resmi','#6366f1']].map(function(x){
+        return React.createElement('div',{key:x[0],style:{display:'flex',alignItems:'center',gap:4,marginBottom:2}},
+          React.createElement('div',{style:{width:6,height:6,borderRadius:'50%',background:x[1],flexShrink:0}}),
+          React.createElement('span',{style:{fontSize:9,color:'#94a3b8'}},x[0])
+        );
+      })
+    ),
+    // Info panel
+    React.createElement('div',{style:{position:'absolute',bottom:80,left:12,zIndex:10,background:'rgba(15,26,46,.92)',border:'1px solid #1e3a5f',borderRadius:10,padding:12,minWidth:175}},
       React.createElement('div',{style:{fontSize:10,color:'#475569',fontWeight:600,marginBottom:5}},'3D GÖRÜNÜM'),
       parcels[0]?React.createElement('div',null,
         React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#fff',marginBottom:1}},parcels[0].projeAdi||'İsimsiz'),
-        React.createElement('div',{style:{fontSize:11,color:'#64748b'}},(parcels[0].il||'?')+' / '+(parcels[0].ilce||'?'))
+        React.createElement('div',{style:{fontSize:11,color:'#64748b',marginBottom:4}},(parcels[0].il||'?')+' / '+(parcels[0].ilce||'?')),
+        cp?React.createElement('div',{style:{fontSize:9,color:'#334155',marginBottom:4}},cp.lat.toFixed(5)+' / '+cp.lng.toFixed(5)):null
       ):null,
-      React.createElement('div',{style:{marginTop:6,fontSize:10,color:'#334155'}},'🏗️ '+parcels.length+' parsel · 🏘️ '+bldCount+' OSM bina'),
-      React.createElement('div',{style:{marginTop:3,fontSize:10,color:'#1e3a5f'}},'Sürükle · Scroll · Touch')
-    ),
-    React.createElement('div',{style:{position:'absolute',top:12,left:12,zIndex:10,background:'rgba(5,13,26,.7)',border:'1px solid #1e3a5f',borderRadius:6,padding:'4px 10px',fontSize:10,color:'#3b82f6',fontWeight:600}},'🏙️ ISDBM 3D')
+      React.createElement('div',{style:{fontSize:10,color:'#334155'}},'🏗️ '+parcels.length+' parsel · 🏘️ '+bldN+' bina · 📍 '+poiN+' POI'),
+      React.createElement('div',{style:{marginTop:3,fontSize:9,color:'#1e3a5f'}},'Sürükle · Scroll · Touch')
+    )
   );
 };
 </script>
