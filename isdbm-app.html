@@ -2848,6 +2848,7 @@ const defaultMetrics={ulasim:60,demografi:60,ticari:60,altyapi:60,risk:60,gelism
 
 const App=()=>{
   const [screen,setScreen]=useState("dashboard");
+  const [showBIM,setShowBIM]=useState(false);
   const [parcels,setParcels]=useState(()=>loadFromLocal());
   const [selectedParcel,setSelectedParcel]=useState(null);
   const [drawMode,setDrawMode]=useState(false);
@@ -2953,6 +2954,9 @@ const App=()=>{
       </div>)}
     </div>
   </div>;
+
+  // ── BIM Viewer ────────────────────────────────────────────────────────
+  if(showBIM&&selectedParcel)return <BIMViewer parcel={selectedParcel} onClose={()=>setShowBIM(false)}/>;
 
   // ── Dashboard ──────────────────────────────────────────────────────────
   if(screen==="dashboard")return <Shell nav="dashboard">
@@ -3278,6 +3282,10 @@ const App=()=>{
             <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Alan: {Number(p.alan||0).toLocaleString("tr-TR")} m² | {p.pois?.length||0} yakın tesis bulundu</div>
           </div>
           <button className="btn btn-primary" onClick={()=>generatePDF(p,alts,sc)}>📥 PDF İndir</button>
+          <button className="btn btn-secondary" onClick={()=>setShowBIM(true)}
+            style={{background:'#7c3aed',color:'#fff',border:'none'}}>
+            🏗️ BIM Görüntüle
+          </button>
         </div>;
       })}
     </div>}
@@ -3498,6 +3506,235 @@ const TerrainLanduse = ({parcel}) => {
     </div>
   );
 };
+
+// ── BIM Model Viewer ─────────────────────────────────────────────────────
+// Kütüphaneler: web-ifc (IFC), Three.js GLTFLoader (GLB/glTF)
+
+function loadScript(src){
+  return new Promise(function(res,rej){
+    if(document.querySelector('script[src="'+src+'"]'))return res();
+    var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;
+    document.head.appendChild(s);
+  });
+}
+
+var BIMViewer=({parcel,onClose})=>{
+  const mountRef=useRef(null);
+  const rendRef=useRef(null);
+  const sceneRef=useRef(null);
+  const camRef=useRef(null);
+  const rafRef=useRef(null);
+  const modelRef=useRef(null);
+  const [status,setStatus]=useState('');
+  const [modelInfo,setModelInfo]=useState(null);
+  const [rotating,setRotating]=useState(false);
+  const [loaded,setLoaded]=useState(false);
+  const rotRef=useRef(false);
+  useEffect(()=>{rotRef.current=rotating;},[rotating]);
+
+  // Three.js sahneyi kur
+  useEffect(()=>{
+    let renderer,camera,scene,animId;
+    loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js')
+      .then(()=>{
+        const THREE=window.THREE;
+        const W=mountRef.current.clientWidth,H=mountRef.current.clientHeight;
+        scene=new THREE.Scene();scene.background=new THREE.Color(0x1a2a3a);
+        sceneRef.current=scene;
+        camera=new THREE.PerspectiveCamera(50,W/H,0.01,10000);
+        camera.position.set(0,10,20);camRef.current=camera;
+        renderer=new THREE.WebGLRenderer({antialias:true});
+        renderer.setSize(W,H);renderer.shadowMap.enabled=true;
+        renderer.outputEncoding=THREE.sRGBEncoding;
+        rendRef.current=renderer;
+        mountRef.current.appendChild(renderer.domElement);
+        scene.add(new THREE.AmbientLight(0xffffff,0.8));
+        var sun=new THREE.DirectionalLight(0xfff5e0,1.2);sun.position.set(10,20,10);sun.castShadow=true;scene.add(sun);
+        var fill=new THREE.DirectionalLight(0x4488ff,0.4);fill.position.set(-10,5,-10);scene.add(fill);
+        var grid=new THREE.GridHelper(100,20,0x334455,0x223344);scene.add(grid);
+        // Mouse kontrol
+        var drag=false,px=0,py=0,theta=0,phi=30,r=20;
+        var el=renderer.domElement;
+        el.addEventListener('mousedown',function(e){drag=true;px=e.clientX;py=e.clientY;});
+        el.addEventListener('mouseup',function(){drag=false;});
+        el.addEventListener('mousemove',function(e){
+          if(!drag)return;
+          theta-=(e.clientX-px)*0.4;phi=Math.max(5,Math.min(85,phi-(e.clientY-py)*0.4));
+          px=e.clientX;py=e.clientY;
+        });
+        el.addEventListener('wheel',function(e){r=Math.max(1,Math.min(500,r+e.deltaY*0.05));e.preventDefault();},{passive:false});
+        var lt=null;
+        el.addEventListener('touchstart',function(e){lt=e.touches[0];},{passive:true});
+        el.addEventListener('touchmove',function(e){
+          if(!lt)return;
+          theta-=(e.touches[0].clientX-lt.clientX)*0.5;
+          phi=Math.max(5,Math.min(85,phi-(e.touches[0].clientY-lt.clientY)*0.5));
+          lt=e.touches[0];e.preventDefault();
+        },{passive:false});
+        function animate(){
+          animId=requestAnimationFrame(animate);
+          if(rotRef.current&&!drag)theta+=0.15;
+          var t=theta*Math.PI/180,p=phi*Math.PI/180;
+          camera.position.set(r*Math.sin(t)*Math.cos(p),r*Math.sin(p),r*Math.cos(t)*Math.cos(p));
+          camera.lookAt(0,0,0);renderer.render(scene,camera);
+        }
+        rafRef.current=animId;animate();
+        setLoaded(true);
+      });
+    return ()=>{
+      cancelAnimationFrame(rafRef.current);
+      if(rendRef.current&&mountRef.current){
+        try{mountRef.current.removeChild(rendRef.current.domElement);}catch(e){}
+        rendRef.current.dispose();
+      }
+    };
+  },[]);
+
+  // GLB/glTF yükle
+  async function loadGLB(file){
+    setStatus('GLB/glTF yükleniyor...');
+    try{
+      await loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js');
+      const THREE=window.THREE;
+      const url=URL.createObjectURL(file);
+      const loader=new THREE.GLTFLoader();
+      loader.load(url,function(gltf){
+        if(modelRef.current)sceneRef.current.remove(modelRef.current);
+        const model=gltf.scene;
+        // Bounding box — modeli merkeze ve zemine oturt
+        const box=new THREE.Box3().setFromObject(model);
+        const center=box.getCenter(new THREE.Vector3());
+        const size=box.getSize(new THREE.Vector3());
+        model.position.sub(center);
+        model.position.y+=size.y/2;
+        // Ölçek — max 20 birim
+        const maxDim=Math.max(size.x,size.y,size.z);
+        if(maxDim>20)model.scale.multiplyScalar(20/maxDim);
+        sceneRef.current.add(model);
+        modelRef.current=model;
+        // Kamera mesafesini ayarla
+        const scaledMax=Math.max(size.x,size.y,size.z)*(20/Math.max(size.x,size.y,size.z));
+        setModelInfo({
+          tip:'GLB/glTF',dosya:file.name,
+          boyut:(file.size/1024).toFixed(0)+' KB',
+          boyutlar:size.x.toFixed(1)+'x'+size.y.toFixed(1)+'x'+size.z.toFixed(1)+' m'
+        });
+        setStatus('');
+        URL.revokeObjectURL(url);
+      },function(p){
+        setStatus('Yükleniyor: '+Math.round(p.loaded/p.total*100)+'%');
+      },function(e){
+        setStatus('GLB hata: '+e.message);
+      });
+    }catch(e){setStatus('Hata: '+e.message);}
+  }
+
+  // IFC yükle — web-ifc kullanır
+  async function loadIFC(file){
+    setStatus('IFC yükleniyor...(web-ifc)');
+    try{
+      // web-ifc-three loader
+      await loadScript('https://cdn.jsdelivr.net/npm/web-ifc@0.0.44/web-ifc-api.js');
+      await loadScript('https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.126/IFCLoader.js');
+      const THREE=window.THREE;
+      const url=URL.createObjectURL(file);
+      const ifcLoader=new window.IFCLoader();
+      await ifcLoader.ifcManager.setWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.44/');
+      ifcLoader.load(url,function(model){
+        if(modelRef.current)sceneRef.current.remove(modelRef.current);
+        const box=new THREE.Box3().setFromObject(model);
+        const center=box.getCenter(new THREE.Vector3());
+        const size=box.getSize(new THREE.Vector3());
+        model.position.sub(center);model.position.y+=size.y/2;
+        const maxDim=Math.max(size.x,size.y,size.z);
+        if(maxDim>20)model.scale.multiplyScalar(20/maxDim);
+        sceneRef.current.add(model);modelRef.current=model;
+        setModelInfo({
+          tip:'IFC',dosya:file.name,
+          boyut:(file.size/1024).toFixed(0)+' KB',
+          boyutlar:size.x.toFixed(1)+'x'+size.y.toFixed(1)+'x'+size.z.toFixed(1)+' m'
+        });
+        setStatus('');
+        URL.revokeObjectURL(url);
+      },function(p){
+        setStatus('IFC: '+Math.round(p.loaded/p.total*100)+'%');
+      },function(e){
+        setStatus('IFC hata: '+e.message);
+      });
+    }catch(e){setStatus('IFC yükleme hatası: '+e.message);}
+  }
+
+  function handleFile(e){
+    const file=e.target.files[0];if(!file)return;
+    const ext=file.name.split('.').pop().toLowerCase();
+    if(ext==='ifc')loadIFC(file);
+    else if(ext==='glb'||ext==='gltf')loadGLB(file);
+    else setStatus('Desteklenmeyen format. IFC, GLB veya glTF yükleyin.');
+  }
+
+  function resetModel(){
+    if(modelRef.current&&sceneRef.current){
+      sceneRef.current.remove(modelRef.current);
+      modelRef.current=null;setModelInfo(null);
+    }
+  }
+
+  return <div style={{position:'fixed',inset:0,background:'#0d1b2a',zIndex:10000,display:'flex',flexDirection:'column'}}>
+    {/* Toolbar */}
+    <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',background:'rgba(0,0,0,.5)',borderBottom:'1px solid #1e3a5f',flexShrink:0}}>
+      <button onClick={onClose} style={{background:'rgba(255,255,255,.1)',color:'#fff',border:'1px solid #334155',padding:'6px 14px',borderRadius:7,fontSize:12,fontWeight:600,cursor:'pointer'}}>← Geri</button>
+      <div style={{fontSize:13,fontWeight:700,color:'#60a5fa'}}>🏗️ BIM Model Görüntüleyici</div>
+      <div style={{flex:1}}/>
+      {/* Upload */}
+      <label style={{background:'#2563eb',color:'#fff',border:'none',padding:'7px 16px',borderRadius:7,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+        📂 Model Yükle
+        <input type="file" accept=".ifc,.glb,.gltf" onChange={handleFile} style={{display:'none'}}/>
+      </label>
+      {modelInfo&&<button onClick={resetModel} style={{background:'rgba(239,68,68,.2)',color:'#fca5a5',border:'1px solid rgba(239,68,68,.3)',padding:'6px 12px',borderRadius:7,fontSize:11,cursor:'pointer'}}>🗑️ Temizle</button>}
+      <button onClick={()=>setRotating(r=>!r)} style={{background:rotating?'rgba(251,191,36,.2)':'rgba(255,255,255,.08)',color:rotating?'#fbbf24':'#94a3b8',border:'1px solid '+(rotating?'#fbbf24':'#334155'),padding:'6px 12px',borderRadius:7,fontSize:11,cursor:'pointer'}}>
+        {rotating?'⏸ Durdur':'▶ Döndür'}
+      </button>
+    </div>
+
+    {/* 3D Canvas */}
+    <div ref={mountRef} style={{flex:1,position:'relative'}}>
+      {/* Status */}
+      {status&&<div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'rgba(0,0,0,.85)',border:'1px solid #1e3a5f',borderRadius:10,padding:'16px 24px',color:'#60a5fa',fontSize:13,textAlign:'center',zIndex:10}}>
+        <div style={{fontSize:28,marginBottom:8}}>⏳</div>
+        <div>{status}</div>
+      </div>}
+
+      {/* Boş hal */}
+      {!modelInfo&&!status&&loaded&&<div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',textAlign:'center',pointerEvents:'none'}}>
+        <div style={{fontSize:48,marginBottom:16}}>🏗️</div>
+        <div style={{color:'#60a5fa',fontSize:16,fontWeight:600,marginBottom:8}}>BIM Model Görüntüleyici</div>
+        <div style={{color:'#64748b',fontSize:12,marginBottom:4}}>IFC, GLB veya glTF dosyası yükleyin</div>
+        <div style={{color:'#334155',fontSize:11}}>Revit → IFC veya GLB export alın</div>
+        <div style={{marginTop:20,display:'flex',gap:12,justifyContent:'center'}}>
+          {[['IFC','BIM verisi + geometri','#8b5cf6'],['GLB','Görsel kalite','#2563eb'],['glTF','Web standardı','#16a34a']].map(([f,d,c])=>(
+            <div key={f} style={{background:'rgba(255,255,255,.05)',border:'1px solid #1e3a5f',borderRadius:8,padding:'10px 16px',textAlign:'center'}}>
+              <div style={{fontSize:18,fontWeight:700,color:c,marginBottom:4}}>{f}</div>
+              <div style={{fontSize:10,color:'#64748b'}}>{d}</div>
+            </div>
+          ))}
+        </div>
+      </div>}
+    </div>
+
+    {/* Model bilgi paneli */}
+    {modelInfo&&<div style={{padding:'10px 16px',background:'rgba(0,0,0,.5)',borderTop:'1px solid #1e3a5f',display:'flex',gap:16,alignItems:'center',flexShrink:0}}>
+      <div style={{fontSize:11,color:'#64748b'}}>
+        <span style={{color:'#60a5fa',fontWeight:600}}>{modelInfo.tip}</span>
+        {' · '}{modelInfo.dosya}
+        {' · '}{modelInfo.boyut}
+        {modelInfo.boyutlar&&<span>{' · '}<span style={{color:'#94a3b8'}}>{modelInfo.boyutlar}</span></span>}
+      </div>
+      <div style={{flex:1}}/>
+      <div style={{fontSize:10,color:'#334155'}}>Sürükle: döndür · Scroll: zoom · Touch: mobil</div>
+    </div>}
+  </div>;
+};
+
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 
