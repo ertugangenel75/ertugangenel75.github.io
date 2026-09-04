@@ -3608,7 +3608,7 @@ var View3D=function(props){
       var lid='parsel-'+i;
       if(map.getLayer(lid)){
         var baseH=IMAR_YUK[p.planDurumu||'Belirsiz']||20;
-        map.setPaintProperty(lid,'fill-extrusion-height',baseH*(heightPct/100));
+        map.setPaintProperty(lid,'fill-extrusion-height',Math.max(baseH*(heightPct/100),1));
       }
     });
   },[heightPct]);
@@ -3659,7 +3659,7 @@ var View3D=function(props){
           url:'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key='+MAPTILER_KEY,
           tileSize:256,
         });
-        map.setTerrain({source:'terrain-src',exaggeration:1.5});
+        map.setTerrain({source:'terrain-src',exaggeration:1.0});
 
         // Gökyüzü
         map.setSky({
@@ -3697,7 +3697,7 @@ var View3D=function(props){
           }else{
             // Koordinat yoksa alan'dan kare oluştur
             var alan=parseFloat(p.alan)||500;
-            var half=Math.sqrt(alan)/2/111320;
+            var half=Math.max(Math.sqrt(alan),50)/2/111320; // min 50m kenar
             var lngHalf=half/Math.cos(pc[1]*Math.PI/180);
             ring=[
               [pc[0]-lngHalf,pc[1]-half],
@@ -3719,13 +3719,18 @@ var View3D=function(props){
             id:lid,
             type:'fill-extrusion',
             source:sid,
+            minzoom:5,
             paint:{
               'fill-extrusion-color':col,
-              'fill-extrusion-height':baseH*(heightPct/100),
+              'fill-extrusion-height':baseH,
               'fill-extrusion-base':0,
-              'fill-extrusion-opacity':0.85,
+              'fill-extrusion-opacity':0.9,
+              'fill-extrusion-vertical-gradient':true,
+              'fill-extrusion-ambient-occlusion-intensity':0.3,
             }
           });
+          map.setLayoutProperty(lid,'visibility','visible');
+          console.log('Parsel layer eklendi:',lid,'height:',baseH,'coords:',ring.length);
 
           // Parsel marker
           var el2=document.createElement('div');
