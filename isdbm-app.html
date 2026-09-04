@@ -3956,7 +3956,7 @@ function createBIMLayer(map, THREE, model, lngLat){
   scene.add(model);
 
   // Transform state — window üzerinden güncellenir
-  window.BIM_TRANSFORM = window.BIM_TRANSFORM || {offX:0,offZ:0,offY:0,rotY:0,scale:1};
+  window.BIM_TRANSFORM = window.BIM_TRANSFORM || {offX:0,offZ:0,offY:0,rotY:0,scale:1,opacity:1.0,color:''};
 
   var mc0=window.maplibregl.MercatorCoordinate.fromLngLat(lngLat,0);
   var mScale=mc0.meterInMercatorCoordinateUnits();
@@ -3992,6 +3992,25 @@ function createBIMLayer(map, THREE, model, lngLat){
         .multiply(rotUserZ)
         .multiply(rotX);
       camera.projectionMatrix=new THREE.Matrix4().fromArray(matrix).multiply(m);
+      // Opacity uygula
+      if(tr.opacity!==undefined&&tr.opacity<1.0){
+        scene.traverse(function(obj){
+          if(obj.isMesh&&obj.material){
+            var mats=Array.isArray(obj.material)?obj.material:[obj.material];
+            mats.forEach(function(m){m.transparent=true;m.opacity=tr.opacity;});
+          }
+        });
+      }
+      // Renk tonu uygula
+      if(tr.color){
+        var col=parseInt(tr.color.replace('#',''),16);
+        scene.traverse(function(obj){
+          if(obj.isMesh&&obj.material){
+            var mats=Array.isArray(obj.material)?obj.material:[obj.material];
+            mats.forEach(function(m){if(m.color)m.color.setHex(col);});
+          }
+        });
+      }
       renderer.resetState();
       renderer.render(scene,camera);
       map.triggerRepaint();
@@ -4022,6 +4041,10 @@ var View3D=function(props){
   var sb3=React.useState(0),bimOffY=sb3[0],setBimOffY=sb3[1];
   var sb4=React.useState(0),bimRotY=sb4[0],setBimRotY=sb4[1];
   var sb5=React.useState(1),bimScale=sb5[0],setBimScale=sb5[1];
+  // Opacity + renk state
+  var so1=React.useState(0.9),kitleOpacity=so1[0],setKitleOpacity=so1[1];
+  var so2=React.useState(1.0),bimOpacity=so2[0],setBimOpacity=so2[1];
+  var so3=React.useState(''),bimColor=so3[0],setBimColor=so3[1];
   var rotRef=React.useRef(null);
   var terrainRef=React.useRef(false);
 
@@ -4032,11 +4055,11 @@ var View3D=function(props){
 
   // BIM transform değişince güncelle
   React.useEffect(function(){
-    window.BIM_TRANSFORM={offX:bimOffX,offZ:bimOffZ,offY:bimOffY,rotY:bimRotY,scale:bimScale};
+    window.BIM_TRANSFORM={offX:bimOffX,offZ:bimOffZ,offY:bimOffY,rotY:bimRotY,scale:bimScale,opacity:bimOpacity,color:bimColor};
     if(mapRef.current&&mapRef.current.getLayer('bim-layer')){
       mapRef.current.triggerRepaint();
     }
-  },[bimOffX,bimOffZ,bimOffY,bimRotY,bimScale]);
+  },[bimOffX,bimOffZ,bimOffY,bimRotY,bimScale,bimOpacity,bimColor]);
 
   React.useEffect(function(){
     if(!mapRef.current)return;
@@ -4066,8 +4089,9 @@ var View3D=function(props){
         if(!ctr){setStatus('Koordinat bulunamadı');return;}
         if(mapRef.current){
           // Transform sıfırla
-          window.BIM_TRANSFORM={offX:0,offZ:0,offY:0,rotY:0,scale:1};
+          window.BIM_TRANSFORM={offX:0,offZ:0,offY:0,rotY:0,scale:1,opacity:1.0,color:''};
           setBimOffX(0);setBimOffZ(0);setBimOffY(0);setBimRotY(0);setBimScale(1);
+          setBimOpacity(1.0);setBimColor('');
           createBIMLayer(mapRef.current,THREE,model,{lng:ctr[0],lat:ctr[1]});
           setBimInfo({tip:tip,ad:ad});
           setStatus('');
@@ -4266,6 +4290,56 @@ var View3D=function(props){
     // Kontrol paneli
     panelOpen?React.createElement('div',{style:{position:'absolute',bottom:80,right:12,zIndex:10,background:'rgba(0,0,0,.92)',border:'1px solid #334155',borderRadius:12,padding:14,width:220}},
       React.createElement('div',{style:{fontSize:11,color:'#60a5fa',fontWeight:700,marginBottom:12}},'⚙️ Görünüm'),
+
+      // Kütle şeffaflık
+      React.createElement('div',{style:{marginBottom:10}},
+        React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+          React.createElement('span',{style:{fontSize:10,color:'#94a3b8'}},'🔲 Kütle Şeffaflığı'),
+          React.createElement('span',{style:{fontSize:10,color:'#fff',fontWeight:600}},Math.round(kitleOpacity*100)+'%')
+        ),
+        React.createElement('input',{type:'range',min:0,max:1,step:0.05,value:kitleOpacity,
+          onChange:function(e){
+            var v=parseFloat(e.target.value);
+            setKitleOpacity(v);
+            if(mapRef.current){
+              parcels.forEach(function(p,i){
+                try{if(mapRef.current.getLayer('parsel-'+i))mapRef.current.setPaintProperty('parsel-'+i,'fill-extrusion-opacity',v);}catch(ex){}
+              });
+            }
+          },
+          style:{width:'100%',accentColor:'#2563eb'}})
+      ),
+
+      // BIM şeffaflık + renk (model yüklüyse)
+      bimInfo?React.createElement('div',{style:{marginBottom:10}},
+        React.createElement('div',{style:{fontSize:10,color:'#a78bfa',fontWeight:600,marginBottom:6}},'🏗️ BIM Model'),
+        React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+          React.createElement('span',{style:{fontSize:10,color:'#94a3b8'}},'Şeffaflık'),
+          React.createElement('span',{style:{fontSize:10,color:'#fff',fontWeight:600}},Math.round(bimOpacity*100)+'%')
+        ),
+        React.createElement('input',{type:'range',min:0,max:1,step:0.05,value:bimOpacity,
+          onChange:function(e){
+            var v=parseFloat(e.target.value);
+            setBimOpacity(v);
+            window.BIM_TRANSFORM.opacity=v;
+            if(mapRef.current&&mapRef.current.getLayer('bim-layer'))mapRef.current.triggerRepaint();
+          },
+          style:{width:'100%',accentColor:'#7c3aed',marginBottom:6}}),
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8}},
+          React.createElement('span',{style:{fontSize:10,color:'#94a3b8'}},'Renk Tonu'),
+          React.createElement('input',{type:'color',value:bimColor,
+            onChange:function(e){
+              setBimColor(e.target.value);
+              window.BIM_TRANSFORM.color=e.target.value;
+              if(mapRef.current&&mapRef.current.getLayer('bim-layer'))mapRef.current.triggerRepaint();
+            },
+            style:{width:36,height:24,border:'none',borderRadius:4,cursor:'pointer',background:'none'}}),
+          React.createElement('button',{
+            onClick:function(){setBimColor('');window.BIM_TRANSFORM.color='';if(mapRef.current&&mapRef.current.getLayer('bim-layer'))mapRef.current.triggerRepaint();},
+            style:{fontSize:9,padding:'2px 6px',borderRadius:4,background:'#334155',color:'#94a3b8',border:'none',cursor:'pointer'}
+          },'Orijinal')
+        )
+      ):null,
 
       React.createElement('div',{style:{marginBottom:12}},
         React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4}},
