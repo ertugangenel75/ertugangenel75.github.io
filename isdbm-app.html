@@ -1180,7 +1180,7 @@ const FinansmanHesap=({alt,parcel})=>{
 
     {/* Tab bar */}
     <div style={{display:'flex',gap:6,marginBottom:16,borderBottom:'1px solid #f1f5f9',paddingBottom:10}}>
-      {[['ozet','📊 Özet'],['parametreler','⚙️ Parametreler'],['projeksiyon',`📈 ${projYil} Yıl`],['proforma','💼 Pro-Forma'],['montecarlo','🎲 Risk']].map(([k,l])=>(
+      {[['ozet','📊 Özet'],['parametreler','⚙️ Parametreler'],['projeksiyon',`📈 ${projYil} Yıl`],['proforma','💼 Pro-Forma'],['montecarlo','🎲 Risk'],['stres','⚡ Stres'],['senaryo','🔀 Senaryo']].map(([k,l])=>(
         <button key={k} onClick={()=>setActiveTab(k)}
           style={{padding:'5px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:'none',
             background:activeTab===k?'#2563eb':'#f8fafc',color:activeTab===k?'#fff':'#374151'}}>
@@ -1499,6 +1499,26 @@ const FinansmanHesap=({alt,parcel})=>{
 
     {/* Monte Carlo Risk Analizi */}
     {activeTab==='montecarlo'&&<MonteCarloPanel
+      capex={capex}
+      ozkaynakOran={ozkaynakOran}
+      krediFaiz={krediFaiz}
+      krediVade={krediVade}
+      yillikGetiriOran={yillikGetiriOran}
+      projYil={projYil}
+      parcel={parcel}
+      alt={alt}
+    />}
+
+    {activeTab==='stres'&&<StresPanel
+      capex={capex}
+      ozkaynakOran={ozkaynakOran}
+      krediFaiz={krediFaiz}
+      krediVade={krediVade}
+      yillikGetiriOran={yillikGetiriOran}
+      projYil={projYil}
+    />}
+
+    {activeTab==='senaryo'&&<SenaryoPanel
       capex={capex}
       ozkaynakOran={ozkaynakOran}
       krediFaiz={krediFaiz}
@@ -3831,6 +3851,398 @@ window.ISDBM_BIM = {
     this.callbacks.push(cb);
     if(this.ready) cb(this.model);
   },
+};
+
+
+// ── Stress Testing Paneli ────────────────────────────────────────────────
+const KRIZ_SENARYOLARI = [
+  {
+    id:'2008', ad:'2008 Küresel Krizi', icon:'🌍', renk:'#dc2626',
+    aciklama:'Lehman Brothers iflası — küresel kredi sıkışması, talep çöküşü',
+    parametreler:{
+      kiraEtki:-40, boslluk:25, faizEtki:+20, degerEtki:-30,
+      maliyetEtki:+15, toparlanmaYil:3,
+    }
+  },
+  {
+    id:'2018tr', ad:'2018 Türkiye Kuru Krizi', icon:'🇹🇷', renk:'#d97706',
+    aciklama:'TL %40 değer kaybı, faiz %24, inşaat maliyeti patlama',
+    parametreler:{
+      kiraEtki:-20, boslluk:15, faizEtki:+40, degerEtki:-25,
+      maliyetEtki:+60, toparlanmaYil:2,
+    }
+  },
+  {
+    id:'deprem', ad:'Deprem Senaryosu', icon:'🏚️', renk:'#7c3aed',
+    aciklama:'Büyük deprem — yapı hasarı, kira kaybı, yeniden yapım maliyeti',
+    parametreler:{
+      kiraEtki:-80, boslluk:60, faizEtki:+5, degerEtki:-50,
+      maliyetEtki:+120, toparlanmaYil:5,
+    }
+  },
+  {
+    id:'enflasyon', ad:'Hiperenflasyon Şoku', icon:'📈', renk:'#ea580c',
+    aciklama:'Yıllık %80+ enflasyon — maliyet patlaması, gecikmeli kira artışı',
+    parametreler:{
+      kiraEtki:+30, boslluk:10, faizEtki:+35, degerEtki:+20,
+      maliyetEtki:+80, toparlanmaYil:2,
+    }
+  },
+  {
+    id:'faiz', ad:'TCMB Faiz Şoku (+15%)', icon:'🏦', renk:'#0284c7',
+    aciklama:'Merkez bankası politika faizi ani 1500 baz puan artışı',
+    parametreler:{
+      kiraEtki:-10, boslluk:12, faizEtki:+150, degerEtki:-20,
+      maliyetEtki:+25, toparlanmaYil:2,
+    }
+  },
+  {
+    id:'pandemi', ad:'Pandemi Senaryosu', icon:'🦠', renk:'#059669',
+    aciklama:'COVID benzeri kapanma — ticari kira çöküşü, konut direnç',
+    parametreler:{
+      kiraEtki:-35, boslluk:30, faizEtki:-5, degerEtki:-15,
+      maliyetEtki:+20, toparlanmaYil:2,
+    }
+  },
+];
+
+function calcStresIRR(params, stres){
+  const {capex, ozkaynakOran, krediFaiz, krediVade, yillikGetiriOran, projYil} = params;
+  const {kiraEtki, boslluk, faizEtki, maliyetEtki} = stres;
+
+  const simCapex   = capex * (1 + maliyetEtki/100);
+  const simFaiz    = Math.max(1, krediFaiz * (1 + faizEtki/100));
+  const simGetiri  = Math.max(0, yillikGetiriOran * (1 + kiraEtki/100));
+  const simBoslluk = Math.min(0.95, boslluk/100);
+
+  const ozk     = Math.round(simCapex * (ozkaynakOran/100));
+  const krd     = simCapex - ozk;
+  const ayFaiz  = simFaiz/100/12;
+  const topAy   = krediVade*12;
+  const taksit  = krd>0&&ayFaiz>0 ? krd*(ayFaiz*Math.pow(1+ayFaiz,topAy))/(Math.pow(1+ayFaiz,topAy)-1) : 0;
+  const yilTak  = taksit*12;
+
+  const cfs = [-ozk];
+  let kumulatif = -ozk;
+  for(let y=1;y<=projYil;y++){
+    const gelir = simCapex*(simGetiri/100)*(1-simBoslluk);
+    const net   = gelir - yilTak;
+    cfs.push(net);
+    kumulatif += net;
+  }
+  const exitNOI  = simCapex*(simGetiri/100)*(1-simBoslluk);
+  const exitDeg  = exitNOI/0.08;
+  const exitNet  = exitDeg - (krd*0.5);
+  cfs[cfs.length-1] += exitNet;
+
+  function calcNPV(rate,cfs){return cfs.reduce((npv,cf,t)=>npv+cf/Math.pow(1+rate,t),0);}
+  function calcIRR(cfs){
+    let rate=0.1;
+    for(let i=0;i<100;i++){
+      const npv=calcNPV(rate,cfs);
+      const dNpv=cfs.reduce((s,cf,t)=>t===0?s:s-t*cf/Math.pow(1+rate,t+1),0);
+      if(Math.abs(dNpv)<1e-10)break;
+      const nr=rate-npv/dNpv;
+      if(Math.abs(nr-rate)<1e-6){rate=nr;break;}
+      rate=Math.max(-0.99,Math.min(9.99,nr));
+    }
+    return isFinite(rate)&&rate>-0.99&&rate<9.99?(rate*100).toFixed(1):'—';
+  }
+  const irr = calcIRR(cfs);
+  const npv = (calcNPV(0.12,cfs)/1e6).toFixed(1);
+  const karli = kumulatif+exitNet > 0;
+
+  return {irr, npv, karli, simCapex, simFaiz, simGetiri, ozk, krd};
+}
+
+// Tornado Chart — hangi değişken IRR'yi en çok etkiliyor
+function calcTornado(params){
+  const {capex,ozkaynakOran,krediFaiz,krediVade,yillikGetiriOran,projYil}=params;
+  const bazStres={kiraEtki:0,boslluk:0,faizEtki:0,maliyetEtki:0};
+  const bazIRR=parseFloat(calcStresIRR(params,bazStres).irr)||0;
+
+  const duyarlilik=[
+    {ad:'Kira Getirisi -20%',    s:{...bazStres,kiraEtki:-20}},
+    {ad:'Kira Getirisi +20%',    s:{...bazStres,kiraEtki:+20}},
+    {ad:'Maliyet +30%',          s:{...bazStres,maliyetEtki:+30}},
+    {ad:'Maliyet -20%',          s:{...bazStres,maliyetEtki:-20}},
+    {ad:'Faiz +50%',             s:{...bazStres,faizEtki:+50}},
+    {ad:'Faiz -30%',             s:{...bazStres,faizEtki:-30}},
+    {ad:'Boşluk %20',            s:{...bazStres,boslluk:20}},
+    {ad:'Boşluk %2',             s:{...bazStres,boslluk:2}},
+  ].map(d=>({
+    ...d,
+    irr:parseFloat(calcStresIRR(params,d.s).irr)||0,
+    etki:parseFloat(calcStresIRR(params,d.s).irr)-bazIRR,
+  }));
+
+  // Değişken bazında max etki
+  const gruplar=[
+    {ad:'Kira Getirisi', neg:duyarlilik[0].etki, poz:duyarlilik[1].etki},
+    {ad:'İnşaat Maliyeti',neg:duyarlilik[2].etki,poz:duyarlilik[3].etki},
+    {ad:'Faiz Oranı',    neg:duyarlilik[4].etki, poz:duyarlilik[5].etki},
+    {ad:'Kira Boşluğu', neg:duyarlilik[6].etki, poz:duyarlilik[7].etki},
+  ].map(g=>({...g,range:Math.abs(g.neg-g.poz)}))
+   .sort((a,b)=>b.range-a.range);
+
+  return {bazIRR, gruplar};
+}
+
+const StresPanel=({capex,ozkaynakOran,krediFaiz,krediVade,yillikGetiriOran,projYil})=>{
+  const [secili,setSecili]=React.useState(null);
+  const params={capex,ozkaynakOran,krediFaiz,krediVade,yillikGetiriOran,projYil};
+  const tornado=React.useMemo(()=>calcTornado(params),[capex,ozkaynakOran,krediFaiz,krediVade,yillikGetiriOran,projYil]);
+  const bazStres={kiraEtki:0,boslluk:0,faizEtki:0,maliyetEtki:0};
+  const bazSonuc=calcStresIRR(params,bazStres);
+
+  return <div>
+    <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>⚡ Stress Testing</div>
+    <div style={{fontSize:11,color:'#64748b',marginBottom:12}}>
+      Kriz senaryolarında yatırımın dayanıklılığını test et
+    </div>
+
+    {/* Baz IRR */}
+    <div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,padding:'8px 12px',marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div style={{fontSize:11,color:'#1d4ed8',fontWeight:600}}>📊 Normal Koşullar (Baz)</div>
+      <div style={{display:'flex',gap:16}}>
+        <span style={{fontSize:12,fontWeight:700,color:'#1d4ed8'}}>IRR %{bazSonuc.irr}</span>
+        <span style={{fontSize:12,fontWeight:700,color:parseFloat(bazSonuc.npv)>=0?'#16a34a':'#ef4444'}}>NPV {parseFloat(bazSonuc.npv)>=0?'+':''}{bazSonuc.npv}M TL</span>
+      </div>
+    </div>
+
+    {/* Kriz senaryoları grid */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
+      {KRIZ_SENARYOLARI.map(k=>{
+        const sonuc=calcStresIRR(params,k.parametreler);
+        const irrFark=parseFloat(sonuc.irr)-parseFloat(bazSonuc.irr);
+        const sec=secili===k.id;
+        return <div key={k.id}
+          onClick={()=>setSecili(sec?null:k.id)}
+          style={{border:'2px solid '+(sec?k.renk:'#e2e8f0'),borderRadius:8,padding:'8px 10px',
+            cursor:'pointer',background:sec?k.renk+'11':'#fff',transition:'all 0.2s'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
+            <div style={{fontSize:16}}>{k.icon}</div>
+            <div style={{fontSize:10,fontWeight:700,color:sonuc.karli?'#16a34a':'#ef4444',
+              background:sonuc.karli?'#dcfce7':'#fee2e2',borderRadius:4,padding:'1px 6px'}}>
+              {sonuc.karli?'Kârlı':'Zararlı'}
+            </div>
+          </div>
+          <div style={{fontSize:11,fontWeight:700,marginBottom:2}}>{k.ad}</div>
+          <div style={{display:'flex',gap:8}}>
+            <span style={{fontSize:13,fontWeight:900,color:parseFloat(sonuc.irr)>=10?'#16a34a':parseFloat(sonuc.irr)>=0?'#f59e0b':'#ef4444'}}>
+              %{sonuc.irr}
+            </span>
+            <span style={{fontSize:10,color:irrFark>=0?'#16a34a':'#ef4444',alignSelf:'center'}}>
+              {irrFark>=0?'▲':'▼'}{Math.abs(irrFark).toFixed(1)}pp
+            </span>
+          </div>
+          <div style={{fontSize:10,color:'#64748b'}}>NPV: {parseFloat(sonuc.npv)>=0?'+':''}{sonuc.npv}M TL</div>
+        </div>;
+      })}
+    </div>
+
+    {/* Seçili kriz detayı */}
+    {secili&&(()=>{
+      const k=KRIZ_SENARYOLARI.find(x=>x.id===secili);
+      const sonuc=calcStresIRR(params,k.parametreler);
+      return <div style={{background:'#fafafa',border:'2px solid '+k.renk,borderRadius:10,padding:12,marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:13,color:k.renk,marginBottom:6}}>{k.icon} {k.ad}</div>
+        <div style={{fontSize:11,color:'#64748b',marginBottom:10}}>{k.aciklama}</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
+          {[
+            ['Kira Etkisi',k.parametreler.kiraEtki+'%',k.parametreler.kiraEtki<0?'#ef4444':'#16a34a'],
+            ['Boşluk Oranı','%'+k.parametreler.boslluk,'#f59e0b'],
+            ['Faiz Artışı','+'+k.parametreler.faizEtki+'%','#ef4444'],
+            ['Maliyet Artışı','+'+k.parametreler.maliyetEtki+'%','#ef4444'],
+            ['Değer Etkisi',k.parametreler.degerEtki+'%',k.parametreler.degerEtki<0?'#ef4444':'#16a34a'],
+            ['Toparlanma',k.parametreler.toparlanmaYil+' yıl','#8b5cf6'],
+          ].map(([l,v,c])=><div key={l} style={{background:'#fff',borderRadius:6,padding:'6px 8px',border:'1px solid #f1f5f9'}}>
+            <div style={{fontSize:9,color:'#94a3b8'}}>{l}</div>
+            <div style={{fontSize:13,fontWeight:700,color:c}}>{v}</div>
+          </div>)}
+        </div>
+        <div style={{display:'flex',gap:12,padding:'8px 12px',background:'#fff',borderRadius:8,border:'1px solid #e2e8f0'}}>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:9,color:'#94a3b8'}}>Stres IRR</div>
+            <div style={{fontSize:20,fontWeight:900,color:parseFloat(sonuc.irr)>=10?'#16a34a':parseFloat(sonuc.irr)>=0?'#f59e0b':'#ef4444'}}>%{sonuc.irr}</div>
+          </div>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:9,color:'#94a3b8'}}>Stres NPV</div>
+            <div style={{fontSize:20,fontWeight:900,color:parseFloat(sonuc.npv)>=0?'#16a34a':'#ef4444'}}>{parseFloat(sonuc.npv)>=0?'+':''}{sonuc.npv}M</div>
+          </div>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:9,color:'#94a3b8'}}>Stres Özkaynak</div>
+            <div style={{fontSize:15,fontWeight:700,color:'#1d4ed8'}}>{(sonuc.ozk/1e6).toFixed(1)}M TL</div>
+          </div>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:9,color:'#94a3b8'}}>Stres Faiz</div>
+            <div style={{fontSize:15,fontWeight:700,color:'#dc2626'}}>%{sonuc.simFaiz.toFixed(0)}</div>
+          </div>
+        </div>
+      </div>;
+    })()}
+
+    {/* Tornado Chart */}
+    <div style={{background:'#f8fafc',borderRadius:8,padding:'10px 12px'}}>
+      <div style={{fontWeight:600,fontSize:12,marginBottom:4}}>🌀 Duyarlılık Analizi (Tornado Chart)</div>
+      <div style={{fontSize:10,color:'#64748b',marginBottom:10}}>
+        Hangi değişken IRR'yi en çok etkiliyor? Baz IRR: %{tornado.bazIRR.toFixed(1)}
+      </div>
+      {tornado.gruplar.map((g,i)=>{
+        const maxRange=tornado.gruplar[0].range;
+        const negW=Math.abs(g.neg)/maxRange*45;
+        const pozW=Math.abs(g.poz)/maxRange*45;
+        return <div key={g.ad} style={{marginBottom:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginBottom:2}}>
+            <span style={{color:'#ef4444',fontWeight:600}}>{g.neg.toFixed(1)}pp</span>
+            <span style={{fontWeight:600,color:'#1e293b'}}>{g.ad}</span>
+            <span style={{color:'#16a34a',fontWeight:600}}>+{g.poz.toFixed(1)}pp</span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',height:18}}>
+            <div style={{flex:1,display:'flex',justifyContent:'flex-end'}}>
+              <div style={{width:negW+'%',background:'#ef4444',height:'100%',borderRadius:'4px 0 0 4px',opacity:0.8}}/>
+            </div>
+            <div style={{width:2,background:'#94a3b8',height:'100%'}}/>
+            <div style={{flex:1}}>
+              <div style={{width:pozW+'%',background:'#16a34a',height:'100%',borderRadius:'0 4px 4px 0',opacity:0.8}}/>
+            </div>
+          </div>
+        </div>;
+      })}
+      <div style={{fontSize:9,color:'#94a3b8',marginTop:6,textAlign:'center'}}>
+        Kırmızı: IRR'yi düşürüyor | Yeşil: IRR'yi artırıyor | Genişlik: etki büyüklüğü
+      </div>
+    </div>
+  </div>;
+};
+
+// ── Senaryo Analizi Paneli ───────────────────────────────────────────────
+const SenaryoPanel=({capex,ozkaynakOran,krediFaiz,krediVade,yillikGetiriOran,projYil,parcel,alt})=>{
+  // 3 senaryo: Kötümser / Baz / İyimser
+  const [senaryolar,setSenaryolar]=React.useState([
+    {id:'kotumser',ad:'Kötümser',icon:'🔴',renk:'#ef4444',
+     getiri:Math.max(1,yillikGetiriOran*0.7).toFixed(1),
+     maliyet:(capex/1e6*1.25).toFixed(1),ozk:ozkaynakOran,
+     faiz:(krediFaiz*1.3).toFixed(0),boslluk:15,vade:krediVade,
+     aciklama:'Piyasa beklentilerin altında kalıyor'},
+    {id:'baz',ad:'Baz',icon:'🟡',renk:'#f59e0b',
+     getiri:yillikGetiriOran.toFixed(1),
+     maliyet:(capex/1e6).toFixed(1),ozk:ozkaynakOran,
+     faiz:krediFaiz.toFixed(0),boslluk:5,vade:krediVade,
+     aciklama:'Mevcut tahminler gerçekleşiyor'},
+    {id:'iyimser',ad:'İyimser',icon:'🟢',renk:'#16a34a',
+     getiri:(yillikGetiriOran*1.3).toFixed(1),
+     maliyet:(capex/1e6*0.9).toFixed(1),ozk:Math.min(50,ozkaynakOran+10),
+     faiz:(krediFaiz*0.8).toFixed(0),boslluk:2,vade:krediVade,
+     aciklama:'Piyasa beklentilerin üzerinde büyüyor'},
+  ]);
+
+  function calcSenaryoIRR(s){
+    const sc={
+      capex:parseFloat(s.maliyet)*1e6,
+      ozkaynakOran:parseFloat(s.ozk),
+      krediFaiz:parseFloat(s.faiz),
+      krediVade:parseFloat(s.vade),
+      yillikGetiriOran:parseFloat(s.getiri),
+      projYil,
+    };
+    const stres={kiraEtki:0,boslluk:parseFloat(s.boslluk),faizEtki:0,maliyetEtki:0};
+    return calcStresIRR(sc,stres);
+  }
+
+  function updateSen(id,field,val){
+    setSenaryolar(prev=>prev.map(s=>s.id===id?{...s,[field]:val}:s));
+  }
+
+  const sonuclar=senaryolar.map(s=>({...s,sonuc:calcSenaryoIRR(s)}));
+
+  const fields=[
+    {key:'getiri',label:'Yıllık Getiri %',min:0,max:50,step:0.5,unit:'%'},
+    {key:'maliyet',label:'CAPEX (M TL)',min:1,max:500,step:1,unit:'M'},
+    {key:'ozk',label:'Özkaynak %',min:10,max:100,step:5,unit:'%'},
+    {key:'faiz',label:'Kredi Faiz %',min:5,max:100,step:1,unit:'%'},
+    {key:'boslluk',label:'Kira Boşluğu %',min:0,max:50,step:1,unit:'%'},
+  ];
+
+  return <div>
+    <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>🔀 Senaryo Analizi</div>
+    <div style={{fontSize:11,color:'#64748b',marginBottom:12}}>
+      3 senaryo yan yana karşılaştır — parametreleri özelleştir
+    </div>
+
+    {/* Sonuç kartları */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:16}}>
+      {sonuclar.map(s=><div key={s.id} style={{border:'2px solid '+s.renk,borderRadius:10,padding:'10px 8px',textAlign:'center',background:s.renk+'08'}}>
+        <div style={{fontSize:18,marginBottom:2}}>{s.icon}</div>
+        <div style={{fontSize:11,fontWeight:700,marginBottom:6}}>{s.ad}</div>
+        <div style={{fontSize:22,fontWeight:900,color:parseFloat(s.sonuc.irr)>=15?'#16a34a':parseFloat(s.sonuc.irr)>=8?'#f59e0b':'#ef4444',marginBottom:2}}>
+          %{s.sonuc.irr}
+        </div>
+        <div style={{fontSize:9,color:'#94a3b8',marginBottom:4}}>IRR</div>
+        <div style={{fontSize:12,fontWeight:700,color:parseFloat(s.sonuc.npv)>=0?'#16a34a':'#ef4444'}}>
+          {parseFloat(s.sonuc.npv)>=0?'+':''}{s.sonuc.npv}M TL
+        </div>
+        <div style={{fontSize:9,color:'#94a3b8'}}>NPV</div>
+        <div style={{marginTop:6,fontSize:9,padding:'2px 6px',borderRadius:4,
+          background:s.sonuc.karli?'#dcfce7':'#fee2e2',
+          color:s.sonuc.karli?'#166534':'#991b1b',fontWeight:600}}>
+          {s.sonuc.karli?'✅ Kârlı':'❌ Zararlı'}
+        </div>
+      </div>)}
+    </div>
+
+    {/* Parametre düzenleme */}
+    <div style={{fontSize:11,fontWeight:600,color:'#475569',marginBottom:8}}>⚙️ Parametreleri Düzenle</div>
+    {fields.map(f=><div key={f.key} style={{marginBottom:10,background:'#f8fafc',borderRadius:8,padding:'8px 10px'}}>
+      <div style={{fontSize:10,color:'#64748b',fontWeight:600,marginBottom:6}}>{f.label}</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6}}>
+        {senaryolar.map(s=><div key={s.id} style={{textAlign:'center'}}>
+          <div style={{fontSize:9,color:s.renk,fontWeight:600,marginBottom:3}}>{s.icon} {s.ad}</div>
+          <div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'center'}}>
+            <input type="number" value={s[f.key]} min={f.min} max={f.max} step={f.step}
+              onChange={e=>updateSen(s.id,f.key,e.target.value)}
+              style={{width:60,padding:'3px 5px',fontSize:11,fontWeight:700,textAlign:'center',
+                border:'1.5px solid '+s.renk,borderRadius:5,color:s.renk}}/>
+            <span style={{fontSize:9,color:'#94a3b8'}}>{f.unit}</span>
+          </div>
+        </div>)}
+      </div>
+    </div>)}
+
+    {/* Senaryo Açıklamaları */}
+    <div style={{marginTop:10}}>
+      {sonuclar.map(s=><div key={s.id} style={{display:'flex',gap:8,alignItems:'center',marginBottom:6,
+        padding:'6px 10px',background:s.renk+'11',borderRadius:7,border:'1px solid '+s.renk+'33'}}>
+        <span style={{fontSize:16}}>{s.icon}</span>
+        <div style={{flex:1}}>
+          <span style={{fontSize:11,fontWeight:600,color:s.renk}}>{s.ad}: </span>
+          <span style={{fontSize:10,color:'#475569'}}>{s.aciklama}</span>
+        </div>
+        <span style={{fontSize:11,fontWeight:700,color:parseFloat(s.sonuc.irr)>=15?'#16a34a':parseFloat(s.sonuc.irr)>=8?'#f59e0b':'#ef4444'}}>
+          %{s.sonuc.irr} IRR
+        </span>
+      </div>)}
+    </div>
+
+    {/* Karar önerisi */}
+    {(()=>{
+      const kotIRR=parseFloat(sonuclar[0].sonuc.irr);
+      const bazIRR=parseFloat(sonuclar[1].sonuc.irr);
+      const iyiIRR=parseFloat(sonuclar[2].sonuc.irr);
+      const spread=iyiIRR-kotIRR;
+      let mesaj='', renk='#1d4ed8', bg='#eff6ff', border='#bfdbfe';
+      if(kotIRR>=10){mesaj='💪 Güçlü yatırım — kötümser senaryoda bile %'+kotIRR.toFixed(1)+' IRR. Düşük risk.';renk='#166534';bg='#f0fdf4';border='#86efac';}
+      else if(kotIRR>=0&&bazIRR>=12){mesaj='⚠️ Orta risk — baz senaryoda iyi (%'+bazIRR.toFixed(1)+'), kötümser zayıf. Özkaynak artırın.';renk='#92400e';bg='#fffbeb';border='#fde68a';}
+      else if(kotIRR<0){mesaj='🔴 Yüksek risk — kötümser senaryoda zarar. Parametreleri gözden geçirin.';renk='#991b1b';bg='#fef2f2';border='#fecaca';}
+      else{mesaj='🟡 Dengeli — senaryo aralığı kabul edilebilir. Risk takibi önemli.';renk='#1d4ed8';bg='#eff6ff';border='#bfdbfe';}
+      return <div style={{marginTop:12,padding:'10px 12px',background:bg,border:'1px solid '+border,borderRadius:8,fontSize:11,color:renk,fontWeight:500}}>
+        {mesaj}
+        <div style={{marginTop:4,fontSize:10,color:'#64748b'}}>
+          IRR aralığı: %{kotIRR.toFixed(1)} → %{bazIRR.toFixed(1)} → %{iyiIRR.toFixed(1)} | Spread: {spread.toFixed(1)} puan
+        </div>
+      </div>;
+    })()}
+  </div>;
 };
 
 
