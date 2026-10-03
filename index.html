@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hikâye Stüdyosu</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1F3A4D">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#1F3A4D;--panel:#27495F;--line:#3A6178;--text:#F7F3E8;--soft:#B9CBD6;--sun:#FFD166;--coral:#EF6F6C;--ok:#7BD389}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 Nunito,system-ui,sans-serif;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+header{max-width:720px;margin:0 auto;padding:22px 18px 4px}
+h1{font:800 32px/1.1 'Baloo 2',system-ui,sans-serif;margin:0;color:var(--sun)}
+header p{margin:4px 0 0;color:var(--soft)}
+main{max-width:720px;margin:0 auto;padding:4px 14px 48px}
+section{background:var(--panel);border-radius:20px;padding:16px;margin:14px 0;border:1px solid var(--line)}
+h2{font:600 21px/1.2 'Baloo 2',system-ui,sans-serif;margin:0 0 8px;display:flex;gap:10px;align-items:center}
+h2 .n{background:var(--sun);color:var(--bg);width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:17px;flex:none}
+label{display:block;font-weight:700;margin:12px 0 4px}
+.hint{color:var(--soft);font-size:14px;margin:4px 0}
+input[type=file]{width:100%;color:var(--soft)}
+textarea,select,input[type=text]{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+textarea{min-height:220px;resize:vertical}
+input[type=range]{width:100%;accent-color:var(--sun)}
+button{font:600 16px 'Baloo 2',system-ui,sans-serif;border:0;border-radius:14px;padding:11px 14px;cursor:pointer;background:var(--line);color:var(--text)}
+button.main{background:var(--sun);color:var(--bg);width:100%;font-size:20px;padding:15px;margin-top:12px}
+button.ikinci{background:var(--line);color:var(--text)}
+button.on{background:var(--coral);color:#fff}
+button:disabled{opacity:.45}
+button:focus-visible,select:focus-visible,textarea:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.row button{flex:1}
+.chips button{flex:none;padding:8px 14px;border-radius:999px}
+.tb button{flex:none;padding:6px 11px;font-size:14px;border-radius:10px;font-family:Nunito,system-ui,sans-serif;font-weight:700}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+canvas#cv{max-width:100%;max-height:72vh;width:auto;height:auto;border-radius:12px;background:#10202b;display:block;touch-action:none;margin:10px auto 0}
+#durum{min-height:24px;font-weight:700;margin-top:12px}
+.bar{height:10px;background:var(--bg);border-radius:6px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;width:0;background:var(--sun)}
+a.indir{display:block;text-align:center;margin-top:12px;background:var(--ok);color:var(--bg);padding:14px;border-radius:14px;font:800 19px 'Baloo 2',system-ui,sans-serif;text-decoration:none}
+.check{display:flex;gap:8px;align-items:center;font-weight:600;margin-top:10px}
+.check input{width:20px;height:20px;accent-color:var(--sun)}
+details{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:700;color:var(--soft)}
+.badge{display:inline-block;margin-top:8px;padding:3px 12px;border-radius:999px;font-weight:700;font-size:14px;background:var(--line)}
+.badge.ok{background:var(--ok);color:var(--bg)}
+.badge.warn{background:var(--coral);color:#fff}
+.gizli{display:none}
+.medya{position:relative;width:72px;height:72px;border-radius:10px;overflow:hidden;background:var(--bg);flex:none}
+.medya canvas,.medya video{width:100%;height:100%;object-fit:cover;display:block}
+.medya b{position:absolute;left:4px;top:2px;font:800 15px 'Baloo 2',sans-serif;color:var(--sun);text-shadow:0 0 4px #000}
+.medya button{position:absolute;right:2px;top:2px;padding:0 7px;border-radius:8px;font-size:14px;background:rgba(0,0,0,.6)}
+.kart{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px}
+.kart p{margin:0 0 8px;font-size:15px}
+.kart p b{color:var(--sun);margin-right:6px}
+.kart .ks{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.kart select{padding:7px 6px;font-size:14px;border-radius:9px}
+#uyari{color:var(--coral);font-size:14px;font-weight:700;margin:6px 0 0;white-space:pre-line}
+pre.soz{background:var(--bg);border-radius:12px;padding:10px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;color:var(--soft);margin:8px 0 0}
+.proje{display:flex;gap:8px;align-items:center;margin-top:8px}
+.proje span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proje small{color:var(--soft);display:block}
+.proje button{padding:7px 12px;font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Hikâye Stüdyosu</h1>
+  <p>Karakteri ve sahneyi seç, senaryoyu yapıştır. Gerisini stüdyo halleder.</p>
+</header>
+<main>
+<section id="devam" class="gizli" style="border-color:var(--sun)">
+  <h2>Yarım kalan video</h2>
+  <p id="devamYazi" class="hint" style="color:var(--text)"></p>
+  <div class="row">
+    <button id="btnDevam" style="background:var(--sun);color:var(--bg)">Kaldığı yerden devam et</button>
+    <button id="btnSil">Sil</button>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">1</span>Karakterler</h2>
+  <div id="karList" class="row chips"></div>
+  <p class="hint">Tek anlatıcı için bir karakter yeter. Diyalog için "+ Karakter" ile ekle ya da senaryoda <b>@Ad: kadın, 30</b> yaz.</p>
+  <label for="kAd">Karakterin adı</label>
+  <input id="kAd" type="text" autocomplete="off">
+  <label for="fChar">Karakter görseli (şeffaf PNG ya da sahneli resim)</label>
+  <input id="fChar" type="file" accept="image/*" multiple>
+  <p class="hint">Birden fazla resim seçersen dosya adı karakter adıyla eşleşenler (elif.png → Elif) kendi karakterine gider.</p>
+  <div id="yuzDurum" class="badge">Karakter seçilmedi</div>
+  <div class="two">
+    <div>
+      <label for="cinsiyet">Cinsiyet</label>
+      <select id="cinsiyet"><option>Kadın</option><option>Erkek</option></select>
+    </div>
+    <div>
+      <label for="yas">Yaş: <span id="yasYaz">30</span></label>
+      <input id="yas" type="range" min="15" max="65" value="30">
+    </div>
+  </div>
+  <canvas id="cv" width="1280" height="720" aria-label="Önizleme"></canvas>
+  <details id="sesKar">
+    <summary>Bu karakterin sesi</summary>
+    <label for="ses">Ses</label>
+    <select id="ses">
+      <option value="auto">Otomatik (cinsiyet ve yaşa göre)</option>
+      <option value="tr_TR-dfki-medium">DFKI</option>
+      <option value="tr_TR-fahrettin-medium">Fahrettin</option>
+      <option value="tr_TR-fettah-medium">Fettah</option>
+    </select>
+    <label class="check"><input id="tonAuto" type="checkbox" checked> Ses tonunu yaşa ve cinsiyete göre ayarla</label>
+    <label for="rTon">Ses tonu: <span id="tonYaz">1.00</span></label>
+    <input id="rTon" type="range" min="0.85" max="1.5" step="0.01" value="1" disabled>
+    <button id="btnDinle" class="main ikinci">Sesi dinle</button>
+    <p class="hint">İlk kullanımda ses modeli bir kez indirilir (yaklaşık 60 MB), sonra telefonda kalır.</p>
+  </details>
+  <details id="elle">
+    <summary>Yüzü elle düzelt</summary>
+    <p class="hint">Bir butona dokun, sonra resimde o noktaya dokun.</p>
+    <div class="row">
+      <button data-m="mouth">Ağız</button>
+      <button data-m="eyeL">Sol göz</button>
+      <button data-m="eyeR">Sağ göz</button>
+    </div>
+    <label for="rScale">Karakter boyutu</label>
+    <input id="rScale" type="range" min="0.6" max="1.3" step="0.01" value="1">
+    <label for="rOff">Yatay konum</label>
+    <input id="rOff" type="range" min="-0.35" max="0.35" step="0.005" value="0">
+    <label for="rMw">Ağız genişliği</label>
+    <input id="rMw" type="range" min="0.005" max="0.2" step="0.001" value="0.09">
+    <label for="rEs">Göz boyutu</label>
+    <input id="rEs" type="range" min="0.003" max="0.1" step="0.0005" value="0.045">
+    <div class="row">
+      <button id="testMouth">Ağzı dene</button>
+      <button id="testBlink">Göz kırp</button>
+    </div>
+    <div class="row"><button id="kSil">Bu karakteri sil</button></div>
+  </details>
+</section>
+
+<section>
+  <h2><span class="n">2</span>Sahne ve görüntüler</h2>
+  <label for="fBg">Sahne görselleri</label>
+  <input id="fBg" type="file" accept="image/*" multiple>
+  <p class="hint">Birden fazla sahne seçebilirsin. Senaryoda <b>== 2</b> ya da <b>== koridor.jpg</b> yazınca o sahneye geçilir.</p>
+  <div id="bgListe" class="row"></div>
+  <label for="fMedya">Ekran görüntüleri ve ekran kayıtları (isteğe bağlı)</label>
+  <input id="fMedya" type="file" accept="image/*,video/*" multiple>
+  <p class="hint">Sıra dosya adına göredir. Etiket vermezsen hikâye boyunca eşit aralıkla gösterilirler; senaryoda <b>[görsel 3]</b> yazarsan tam o cümlede değişir. Videoların kendi sesi kapatılır.</p>
+  <div id="medyaListe" class="row"></div>
+  <label for="duzen">Görüntü düzeni</label>
+  <select id="duzen">
+    <option value="birlesik">Karakter sahnenin içinde (tek resim, en doğal)</option>
+    <option value="karakter" selected>Karakter ve sahne ayrı resim</option>
+    <option value="ekran">Görüntüler tam ekran, karakter köşede anlatır</option>
+    <option value="sadece">Sadece görüntüler ve anlatım (karakter yok)</option>
+  </select>
+</section>
+
+<section>
+  <h2><span class="n">3</span>Senaryo</h2>
+  <label for="baslik">Video başlığı (isteğe bağlı, açılışta görünür)</label>
+  <input id="baslik" type="text" placeholder="Hastane koridorunda bir gece">
+  <label for="fMetin">Senaryo dosyası (isteğe bağlı)</label>
+  <input id="fMetin" type="file" accept=".txt,.md,.docx,text/plain">
+  <label for="metin">Senaryo</label>
+  <div class="row tb" id="etiketler" aria-label="İmlecin olduğu yere etiket ekle">
+    <button data-t="[üzgün] ">üzgün</button><button data-t="[mutlu] ">mutlu</button><button data-t="[şaşkın] ">şaşkın</button>
+    <button data-t="[düşünceli] ">düşünceli</button><button data-t="[yakın] ">yakın</button><button data-t="[geniş] ">geniş</button>
+    <button data-t="[duraklama 1] ">duraklama</button><button data-t="[görsel 1] ">görsel</button>
+  </div>
+  <textarea id="metin" placeholder="Merhaba, ben Elif. Size lise yıllarımda başıma gelen bir olayı anlatmak istiyorum..."></textarea>
+  <p class="hint">Düz metin yeterlidir: duygu ve kamera otomatik seçilir. Paragraflar arasında boş satır bırakırsan anlatıcı nefes alır ve kamera yeni plana geçer. Etiket eklersen otomatik seçimin yerine geçer.</p>
+  <p id="uyari"></p>
+  <details id="kartlar">
+    <summary>Cümleleri tek tek ayarla (<span id="kartSay">0</span> cümle)</summary>
+    <p class="hint">Her cümlenin duygusunu, planını ve görüntüsünü buradan seç; etiket metne kendiliğinden yazılır.</p>
+    <div id="kartListe"></div>
+  </details>
+  <details>
+    <summary>Senaryo dili</summary>
+<pre class="soz"># Video başlığı
+## Bölüm adı   (YouTube bölümü)
+@Elif: kadın, 30
+@Ahmet: erkek, 55, ses=fettah
+
+== koridor.jpg
+Elif [üzgün, yakın]: O gece hiç uyumadım.
+[görsel 2] Sabaha karşı telefon çaldı.
+[duraklama 1.5]
+Ahmet: Geçmiş olsun kızım.
+
+== 2 | düzen: ekran
+Elif: [mutlu] Sonunda eve döndük!</pre>
+    <p class="hint">Duygular: üzgün, mutlu, şaşkın, düşünceli, nötr. Planlar: geniş, orta, yakın. Düzenler: tek, ayrı, ekran, sadece.</p>
+  </details>
+</section>
+
+<section>
+  <h2><span class="n">4</span>Video</h2>
+  <label for="cozunurluk">Biçim ve kalite</label>
+  <select id="cozunurluk">
+    <option value="1280x720">Yatay 720p (önerilen)</option>
+    <option value="1920x1080">Yatay 1080p (yeni telefonlar için)</option>
+    <option value="720x1280">Dikey 720p (Shorts, Reels)</option>
+    <option value="1080x1920">Dikey 1080p (Shorts, Reels)</option>
+  </select>
+  <label for="altyazi">Altyazı</label>
+  <select id="altyazi">
+    <option value="klasik" selected>Klasik (kutulu, okunan kelime sarı)</option>
+    <option value="vurgu">Kelime vurgulu (büyük, Shorts tarzı)</option>
+    <option value="yok">Kapalı</option>
+  </select>
+  <label class="check"><input id="kamera" type="checkbox" checked> Otomatik kamera hareketleri</label>
+  <label for="muzik">Fon müziği</label>
+  <select id="muzik">
+    <option value="yok" selected>Yok</option>
+    <option value="pad">Hafif hazır fon</option>
+    <option value="dosya">Kendi müzik dosyam</option>
+  </select>
+  <div id="muzikBox" class="gizli">
+    <input id="fMuzik" type="file" accept="audio/*" aria-label="Müzik dosyası">
+    <p class="hint">Müzik video boyunca döner; anlatım sürerken kendiliğinden kısılır.</p>
+  </div>
+
+  <details>
+    <summary>Ses kaynağı</summary>
+    <label for="kaynak">Anlatım</label>
+    <select id="kaynak">
+      <option value="ai">Stüdyo seslendirsin (cihazda)</option>
+      <option value="dosya">Kendi ses kaydımı kullanacağım</option>
+    </select>
+    <div id="fileBox" class="gizli">
+      <label for="fAudio">Ses kaydı</label>
+      <input id="fAudio" type="file" accept="audio/*">
+      <p class="hint">Senaryoyu da yazarsan altyazı ve ağız hareketi, kayıttaki duraklamalara göre cümlelere hizalanır.</p>
+    </div>
+  </details>
+  <details>
+    <summary>Marka: logo ve kapanış</summary>
+    <label for="fLogo">Logo (köşede görünür, isteğe bağlı)</label>
+    <input id="fLogo" type="file" accept="image/*">
+    <label for="kapanis">Kapanış yazısı (isteğe bağlı)</label>
+    <input id="kapanis" type="text" placeholder="Abone olmayı unutma">
+  </details>
+
+  <div class="row">
+    <button id="btnOn">Önizle</button>
+    <button id="btnDur" disabled>Durdur</button>
+  </div>
+  <button id="btnRec" class="main">Videoyu oluştur</button>
+  <p class="hint">"Videoyu oluştur"a bastıktan sonra başka uygulamalara geçebilir ya da ekranı kilitleyebilirsin. Video arka planda hazırlanır, bitince telefon titrer ve kısa bir ses çalar. Yalnızca Chrome'daki bu sekmeyi kapatma.</p>
+  <div id="durum" role="status"></div>
+  <div class="bar"><i id="bar"></i></div>
+  <div id="sonuc"></div>
+  <div id="ekler" class="gizli">
+    <div class="row">
+      <button id="btnSrt">Altyazı (.srt)</button>
+      <button id="btnThumb">Küçük resim</button>
+      <button id="btnBolum">Bölümler</button>
+    </div>
+    <textarea id="bolumYazi" class="gizli" style="min-height:90px;margin-top:8px" readonly aria-label="Bölüm listesi"></textarea>
+  </div>
+</section>
+
+<section>
+  <h2>Projeler</h2>
+  <p class="hint">Senaryo, karakterler, görseller ve ayarlar bu telefonda saklanır.</p>
+  <div class="row">
+    <button id="prKaydet">Projeyi kaydet</button>
+    <button id="prYeni">Yeni proje</button>
+  </div>
+  <div id="prListe"></div>
+  <details>
+    <summary>Başka cihaza taşı</summary>
+    <p class="hint">Senaryo ve ayarlar bir dosyaya yazılır. Resim ve videolar dosyaya girmez; diğer cihazda yeniden seçilir.</p>
+    <div class="row">
+      <button id="prDisa">Dışa aktar (.json)</button>
+      <button id="prIceBtn">İçe aktar</button>
+    </div>
+    <input id="prIce" type="file" accept=".json,application/json" class="gizli" aria-label="Proje dosyası">
+  </details>
+</section>
+
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

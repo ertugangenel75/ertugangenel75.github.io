@@ -1,0 +1,17 @@
+{
+  "name": "Hikâye Stüdyosu",
+  "short_name": "Hikâye Stüdyosu",
+  "description": "Senaryodan konuşan animasyon karakter videosu üretir.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1F3A4D",
+  "theme_color": "#1F3A4D",
+  "lang": "tr",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
